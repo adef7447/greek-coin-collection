@@ -5,12 +5,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
 export default function MyCoins() {
-
   const [coins, setCoins] = useState<any[]>([]);
   const [userEmail, setUserEmail] = useState("");
 
   async function getMyCoins() {
-
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -42,17 +40,28 @@ export default function MyCoins() {
 
     if (coinsError) {
       console.log(coinsError);
-    } else {
-      setCoins(coinsData || []);
+      return;
     }
+
+    const mergedCoins = (coinsData || []).map((coin) => {
+      const userCoin = userCoins.find(
+        (u) => u.coin_id === coin.id
+      );
+
+      return {
+        ...coin,
+        userCondition: userCoin?.condition ?? null,
+        userDamage: userCoin?.damage ?? 0,
+      };
+    });
+
+    setCoins(mergedCoins);
   }
 
   useEffect(() => {
-
     getMyCoins();
 
     async function checkUser() {
-
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -63,14 +72,59 @@ export default function MyCoins() {
     }
 
     checkUser();
-
   }, []);
+
+  function getConditionName(condition: number) {
+    const conditions = [
+      "",
+      "P",
+      "FR",
+      "AG",
+      "G",
+      "VG",
+      "F",
+      "VF",
+      "XF",
+      "AU",
+      "LU",
+      "MU",
+      "BU",
+      "HU",
+    ];
+
+    return conditions[condition] || "Unknown";
+  }
+
+  function getProblems(damageNumber: number) {
+    const damage = String(damageNumber)
+      .padStart(5, "0");
+
+    const problems: string[] = [];
+
+    if (damage[0] === "1") problems.push("Damaged");
+    if (damage[0] === "2") problems.push("Heavy Damage");
+
+    if (damage[1] === "1") problems.push("Bent");
+    if (damage[1] === "2") problems.push("Heavily Bent");
+
+    if (damage[2] === "1") problems.push("Cleaned");
+    if (damage[2] === "2") problems.push("Harshly Cleaned");
+
+    if (damage[3] === "1")
+      problems.push("Environmental Damage");
+    if (damage[3] === "2")
+      problems.push("Heavy Environmental Damage");
+
+    if (damage[4] === "1") problems.push("Holed");
+    if (damage[4] === "2") problems.push("Heavily Holed");
+
+    return problems.join(", ");
+  }
 
   return (
     <main className="min-h-screen p-8 bg-blue-50 text-black">
 
       <div className="flex justify-between items-center mb-8">
-
         <div>
 
           <h1 className="text-4xl font-bold">
@@ -144,6 +198,22 @@ export default function MyCoins() {
             <p>
               Mintage: {coin.mintage}
             </p>
+
+            <p>
+              Condition:{" "}
+              {getConditionName(
+                coin.userCondition
+              )}
+            </p>
+
+            {coin.userDamage > 0 && (
+              <p>
+                Problems:{" "}
+                {getProblems(
+                  coin.userDamage
+                )}
+              </p>
+            )}
 
             <p>
               Rarity:
