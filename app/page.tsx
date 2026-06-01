@@ -10,7 +10,13 @@ export default function Home() {
   const [coins, setCoins] = useState<any[]>([]);
   const [userEmail, setUserEmail] = useState("");
   const [page, setPage] = useState(1);
+const [condition, setCondition] = useState(7);
 
+const [damaged, setDamaged] = useState(0);
+const [bent, setBent] = useState(0);
+const [cleaned, setCleaned] = useState(0);
+const [environmental, setEnvironmental] = useState(0);
+const [holed, setHoled] = useState(0);
 const coinsPerPage = 42;
 
 const totalPages = Math.ceil(coins.length / coinsPerPage);
@@ -86,17 +92,20 @@ const { data, error } = await supabase
       alert("Login first");
       return;
     }
+    const damage = Number(
+  `${damaged}${bent}${cleaned}${environmental}${holed}`
+);
 
-    const { error } = await supabase
-      .from("user_coins")
-      .insert([
-        {
-          user_id: user.id,
-          coin_id: coinId,
-          condition: "VF",
-          problem: "None",
-        },
-      ]);
+const { error } = await supabase
+  .from("user_coins")
+  .insert([
+    {
+      user_id: user.id,
+      coin_id: coinId,
+      condition: condition,
+      damage: damage,
+    },
+  ]);
 
     if (error) {
       alert(error.message);
@@ -275,7 +284,119 @@ const { data, error } = await supabase
                   : "Basic"}
               </span>
             </p>
+<div className="mt-4">
 
+  <label className="block font-bold mb-1">
+    Condition
+  </label>
+
+  <select
+    className="border p-2 w-full"
+    value={condition}
+    onChange={(e) =>
+      setCondition(Number(e.target.value))
+    }
+  >
+    <option value={1}>P</option>
+    <option value={2}>FR</option>
+    <option value={3}>AG</option>
+    <option value={4}>G</option>
+    <option value={5}>VG</option>
+    <option value={6}>F</option>
+    <option value={7}>VF</option>
+    <option value={8}>XF</option>
+    <option value={9}>AU</option>
+    <option value={10}>LU</option>
+    <option value={11}>MU</option>
+    <option value={12}>BU</option>
+    <option value={13}>HU</option>
+  </select>
+
+</div>
+
+<div className="mt-4">
+
+  <label className="block">
+    Damaged
+  </label>
+
+  <select
+    className="border p-1 w-full"
+    value={damaged}
+    onChange={(e) =>
+      setDamaged(Number(e.target.value))
+    }
+  >
+    <option value={0}>None</option>
+    <option value={1}>Damaged</option>
+    <option value={2}>Heavy Damage</option>
+  </select>
+
+  <label className="block mt-2">
+    Bent
+  </label>
+
+  <select
+    className="border p-1 w-full"
+    value={bent}
+    onChange={(e) =>
+      setBent(Number(e.target.value))
+    }
+  >
+    <option value={0}>None</option>
+    <option value={1}>Bent</option>
+    <option value={2}>Heavily Bent</option>
+  </select>
+
+  <label className="block mt-2">
+    Cleaned
+  </label>
+
+  <select
+    className="border p-1 w-full"
+    value={cleaned}
+    onChange={(e) =>
+      setCleaned(Number(e.target.value))
+    }
+  >
+    <option value={0}>None</option>
+    <option value={1}>Cleaned</option>
+    <option value={2}>Harshly Cleaned</option>
+  </select>
+
+  <label className="block mt-2">
+    Environmental Damage
+  </label>
+
+  <select
+    className="border p-1 w-full"
+    value={environmental}
+    onChange={(e) =>
+      setEnvironmental(Number(e.target.value))
+    }
+  >
+    <option value={0}>None</option>
+    <option value={1}>Environmental Damage</option>
+    <option value={2}>Heavy Environmental Damage</option>
+  </select>
+
+  <label className="block mt-2">
+    Holed
+  </label>
+
+  <select
+    className="border p-1 w-full"
+    value={holed}
+    onChange={(e) =>
+      setHoled(Number(e.target.value))
+    }
+  >
+    <option value={0}>None</option>
+    <option value={1}>Holed</option>
+    <option value={2}>Heavily Holed</option>
+  </select>
+
+</div>
             <button
               className="bg-green-600 text-white px-4 py-2 mt-4 rounded"
               onClick={() => addToCollection(coin.id)}
