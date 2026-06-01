@@ -5,11 +5,20 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 export default function Home() {
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [coins, setCoins] = useState<any[]>([]);
   const [userEmail, setUserEmail] = useState("");
+  const [page, setPage] = useState(1);
+
+const coinsPerPage = 42;
+
+const totalPages = Math.ceil(coins.length / coinsPerPage);
+
+const displayedCoins = coins.slice(
+  (page - 1) * coinsPerPage,
+  page * coinsPerPage
+);
 
   async function signUp() {
 
@@ -53,10 +62,12 @@ export default function Home() {
 
   async function getCoins() {
 
-    const { data, error } = await supabase
-      .from("coins")
-      .select("*")
-      .order("id", { ascending: true });
+const { data, error } = await supabase
+  .from("coins")
+  .select("*")
+  .order("year", { ascending: true })
+  .order("denomination", { ascending: true })
+  .order("coin_id", { ascending: true });
 
     if (error) {
       console.log(error);
@@ -178,8 +189,7 @@ export default function Home() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
 
-        {coins.map((coin) => (
-
+       {displayedCoins.map((coin) => (
           <div
             key={coin.id}
             className="border p-4 rounded bg-white shadow"
@@ -278,6 +288,25 @@ export default function Home() {
         ))}
 
       </div>
+      <div className="flex flex-wrap justify-center gap-2 mt-8">
+
+  {Array.from({ length: totalPages }, (_, i) => (
+
+    <button
+      key={i + 1}
+      onClick={() => setPage(i + 1)}
+      className={`px-4 py-2 rounded border ${
+        page === i + 1
+          ? "bg-blue-600 text-white"
+          : "bg-white text-black"
+      }`}
+    >
+      {i + 1}
+    </button>
+
+  ))}
+
+</div>
 
     </main>
   );
