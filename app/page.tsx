@@ -5,10 +5,11 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 export default function Home() {
+  const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [coins, setCoins] = useState<any[]>([]);
-  const [userEmail, setUserEmail] = useState("");
+const [userDisplayName, setUserDisplayName] = useState("");
   const [page, setPage] = useState(1);
 const [condition, setCondition] = useState(7);
 
@@ -25,20 +26,43 @@ const displayedCoins = coins.slice(
   (page - 1) * coinsPerPage,
   page * coinsPerPage
 );
-
+<input
+  className="border p-2 bg-white rounded"
+  type="text"
+  placeholder="Display Name"
+  onChange={(e) => setDisplayName(e.target.value)}
+/>
   async function signUp() {
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+  });
 
-    if (error) {
-      alert(error.message);
-    } else {
-      alert("Account created!");
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  if (data.user) {
+
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .insert([
+        {
+          id: data.user.id,
+          display_name: displayName,
+        },
+      ]);
+
+    if (profileError) {
+      alert(profileError.message);
+      return;
     }
   }
+
+  alert("Account created!");
+}
 
   async function login() {
 
@@ -51,8 +75,15 @@ const displayedCoins = coins.slice(
       alert(error.message);
     } else {
 
-      setUserEmail(data.user.email || "");
+const { data: profile } = await supabase
+  .from("profiles")
+  .select("display_name")
+  .eq("id", data.user.id)
+  .single();
 
+setUserDisplayName(
+  profile?.display_name || ""
+);
       alert("Logged in!");
     }
   }
@@ -61,8 +92,7 @@ const displayedCoins = coins.slice(
 
     await supabase.auth.signOut();
 
-    setUserEmail("");
-
+setUserDisplayName("");
     alert("Logged out!");
   }
 
@@ -124,9 +154,18 @@ const { error } = await supabase
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (user) {
-        setUserEmail(user.email || "");
-      }
+if (user) {
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("id", user.id)
+    .single();
+
+  setUserDisplayName(
+    profile?.display_name || ""
+  );
+}
     }
 
     checkUser();
@@ -140,11 +179,11 @@ const { error } = await supabase
         Greek Coin Collection
       </h1>
 
-      {userEmail && (
+{userDisplayName && (
         <div className="mb-8">
 
           <p className="text-lg text-gray-700">
-            Logged in as: {userEmail}
+            Logged in as: {userDisplayName}
           </p>
 
           <Link

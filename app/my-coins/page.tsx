@@ -6,7 +6,7 @@ import { supabase } from "../../lib/supabase";
 
 export default function MyCoins() {
   const [coins, setCoins] = useState<any[]>([]);
-  const [userEmail, setUserEmail] = useState("");
+  const [userDisplayName, setUserDisplayName] = useState("");
 
   async function getMyCoins() {
     const {
@@ -133,7 +133,7 @@ export default function MyCoins() {
 
           {userEmail && (
             <p className="text-gray-700 mt-2">
-              Logged in as: {userEmail}
+              Logged in as: {userDisplayName}
             </p>
           )}
 
