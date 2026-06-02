@@ -53,6 +53,7 @@ const displayedCoins = coins.slice(
       {
         id: user.id,
         display_name: displayName,
+        score: 0,
       },
     ]);
 
@@ -80,6 +81,12 @@ const { data: profile } = await supabase
   .select("display_name")
   .eq("id", data.user.id)
   .single();
+  const [userScore, setUserScore] = useState(0);
+  setUserDisplayName(profile?.display_name || "");
+setUserScore(profile?.score || 0);
+<p className="text-lg text-gray-700">
+  Score: {userScore}
+</p>
 
 setUserDisplayName(
   profile?.display_name || ""
@@ -176,7 +183,7 @@ if (user) {
     <main className="min-h-screen p-8 bg-blue-50 text-black">
 
       <h1 className="text-4xl font-bold mb-2">
-Greek Coin Collection TEST123
+Greek Coin Collection
       </h1>
 
 {userDisplayName && (
