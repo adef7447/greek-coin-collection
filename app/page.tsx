@@ -26,12 +26,6 @@ const displayedCoins = coins.slice(
   (page - 1) * coinsPerPage,
   page * coinsPerPage
 );
-<input
-  className="border p-2 bg-white rounded"
-  type="text"
-  placeholder="Display Name"
-  onChange={(e) => setDisplayName(e.target.value)}
-/>
  async function signUp() {
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -182,7 +176,7 @@ if (user) {
     <main className="min-h-screen p-8 bg-blue-50 text-black">
 
       <h1 className="text-4xl font-bold mb-2">
-        Greek Coin Collection
+Greek Coin Collection TEST123
       </h1>
 
 {userDisplayName && (
@@ -203,6 +197,13 @@ if (user) {
       )}
 
       <div className="flex flex-wrap gap-2 mb-8">
+      <input
+  className="border p-2 bg-white rounded"
+  type="text"
+  placeholder="Display Name"
+  value={displayName}
+  onChange={(e) => setDisplayName(e.target.value)}
+/>
 
         <input
           className="border p-2 bg-white rounded"
