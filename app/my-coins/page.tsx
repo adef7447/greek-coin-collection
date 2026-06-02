@@ -20,12 +20,14 @@ export default function MyCoins() {
     .eq("user_id", user.id)
     .eq("coin_id", coinId);
 
-  if (error) {
-    alert(error.message);
-  } else {
-    alert("Coin removed!");
-    getMyCoins();
-  }
+ if (error) {
+  console.log(error);
+  alert(error.message);
+} else {
+  console.log("Deleted");
+  alert("Coin removed!");
+  getMyCoins();
+}
 }
 
   async function getMyCoins() {
