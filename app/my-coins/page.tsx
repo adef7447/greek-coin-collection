@@ -7,6 +7,26 @@ import { supabase } from "../../lib/supabase";
 export default function MyCoins() {
   const [coins, setCoins] = useState<any[]>([]);
   const [userDisplayName, setUserDisplayName] = useState("");
+  async function removeCoin(coinId: number) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  const { error } = await supabase
+    .from("user_coins")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("coin_id", coinId);
+
+  if (error) {
+    alert(error.message);
+  } else {
+    alert("Coin removed!");
+    getMyCoins();
+  }
+}
 
   async function getMyCoins() {
     const {
@@ -253,6 +273,20 @@ export default function MyCoins() {
                   : "Basic"}
               </span>
             </p>
+            <button
+  className="bg-red-600 text-white px-4 py-2 mt-4 rounded"
+  onClick={() => {
+    if (
+      confirm(
+        "Remove this coin from your collection?"
+      )
+    ) {
+      removeCoin(coin.id);
+    }
+  }}
+>
+  Remove Coin
+</button>
 
           </div>
 
