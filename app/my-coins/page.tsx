@@ -67,7 +67,7 @@ export default function MyCoins() {
       } = await supabase.auth.getUser();
 
       if (user) {
-        setUserEmail(user.email || "");
+        setUserDisplayName(user.email || "");
       }
     }
 
@@ -131,7 +131,7 @@ export default function MyCoins() {
             My Coins
           </h1>
 
-          {userEmail && (
+          {userDisplayName && (
             <p className="text-gray-700 mt-2">
               Logged in as: {userDisplayName}
             </p>

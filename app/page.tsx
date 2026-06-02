@@ -32,8 +32,7 @@ const displayedCoins = coins.slice(
   placeholder="Display Name"
   onChange={(e) => setDisplayName(e.target.value)}
 />
-  async function signUp() {
-
+ async function signUp() {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -44,24 +43,31 @@ const displayedCoins = coins.slice(
     return;
   }
 
-  if (data.user) {
+  // get logged in user safely
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .insert([
-        {
-          id: data.user.id,
-          display_name: displayName,
-        },
-      ]);
-
-    if (profileError) {
-      alert(profileError.message);
-      return;
-    }
+  if (!user) {
+    alert("User created but not logged in yet. Please log in.");
+    return;
   }
 
-  alert("Account created!");
+  const { error: profileError } = await supabase
+    .from("profiles")
+    .insert([
+      {
+        id: user.id,
+        display_name: displayName,
+      },
+    ]);
+
+  if (profileError) {
+    console.log(profileError);
+    alert(profileError.message);
+  } else {
+    alert("Account created!");
+  }
 }
 
   async function login() {
