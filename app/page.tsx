@@ -10,6 +10,7 @@ export default function Home() {
   const [password, setPassword] = useState("");
   const [coins, setCoins] = useState<any[]>([]);
 const [userDisplayName, setUserDisplayName] = useState("");
+const [userScore, setUserScore] = useState(0);
   const [page, setPage] = useState(1);
 const [condition, setCondition] = useState(7);
 
@@ -78,19 +79,12 @@ const displayedCoins = coins.slice(
 
 const { data: profile } = await supabase
   .from("profiles")
-  .select("display_name")
+  .select("display_name, score")
   .eq("id", data.user.id)
   .single();
-  const [userScore, setUserScore] = useState(0);
-  setUserDisplayName(profile?.display_name || "");
-setUserScore(profile?.score || 0);
-<p className="text-lg text-gray-700">
-  Score: {userScore}
-</p>
 
-setUserDisplayName(
-  profile?.display_name || ""
-);
+setUserDisplayName(profile?.display_name || "");
+setUserScore(profile?.score || 0);
       alert("Logged in!");
     }
   }
@@ -163,15 +157,14 @@ const { error } = await supabase
 
 if (user) {
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("display_name")
-    .eq("id", user.id)
-    .single();
+const { data: profile } = await supabase
+  .from("profiles")
+  .select("display_name, score")
+  .eq("id", user.id)
+  .single();
 
-  setUserDisplayName(
-    profile?.display_name || ""
-  );
+setUserDisplayName(profile?.display_name || "");
+setUserScore(profile?.score || 0);
 }
     }
 
@@ -189,9 +182,9 @@ Greek Coin Collection
 {userDisplayName && (
         <div className="mb-8">
 
-          <p className="text-lg text-gray-700">
-            Logged in as: {userDisplayName}
-          </p>
+         <p className="text-lg text-gray-700">
+  Score: {userScore}
+</p>
 
           <Link
             href="/my-coins"
