@@ -57,8 +57,6 @@ export default function AchievementsPage() {
           >
             <h2 className="text-2xl font-bold">{achievement.name}</h2>
 
-            <p className="mt-2">{achievement.description}</p>
-
             <p className="mt-2 font-bold">
               Reward: {achievement.points} points
             </p>
@@ -81,8 +79,6 @@ export default function AchievementsPage() {
             className="border p-4 rounded shadow bg-white"
           >
             <h2 className="text-2xl font-bold">{achievement.name}</h2>
-
-            <p className="mt-2">{achievement.description}</p>
 
             <p className="mt-2 font-bold">
               Reward: {achievement.points} points
