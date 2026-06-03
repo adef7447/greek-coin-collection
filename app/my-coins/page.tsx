@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
+import { checkAchievements } from "../../lib/checkAchievements";
 
 export default function MyCoins() {
   function getScoreFromRarity(rarity: number) {
