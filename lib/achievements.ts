@@ -2,7 +2,7 @@ type Coin = {
   year: number;
   rarity: number;
   metal: string;
-  userCondition?: number;
+  condition: number; // ✅ MUST match your Supabase column
 };
 
 type Achievement = {
@@ -35,6 +35,8 @@ export const achievements: Achievement[] = [
     points: 500,
     check: (coins: Coin[]) => coins.length >= 200,
   },
+
+  // YEARS
   {
     id: 4,
     category: "Years",
@@ -50,6 +52,8 @@ export const achievements: Achievement[] = [
     check: (coins: Coin[]) =>
       coins.some(c => c.year >= 1800 && c.year <= 1899),
   },
+
+  // MATERIALS
   {
     id: 6,
     category: "Materials",
@@ -74,34 +78,41 @@ export const achievements: Achievement[] = [
     check: (coins: Coin[]) =>
       coins.filter(c => c.metal === "Silver").length >= 50,
   },
+
+  // RARITY
   {
     id: 9,
     category: "Rarity",
     name: "Rare Find",
     points: 25,
-    check: (coins: Coin[]) => coins.some(c => c.rarity >= 30),
+    check: (coins: Coin[]) =>
+      coins.some(c => c.rarity >= 30),
   },
   {
     id: 10,
     category: "Rarity",
     name: "Legendary Hunter",
     points: 500,
-    check: (coins: Coin[]) => coins.some(c => c.rarity >= 50),
+    check: (coins: Coin[]) =>
+      coins.some(c => c.rarity >= 50),
   },
   {
     id: 11,
     category: "Rarity",
     name: "One Of A Kind",
     points: 5000,
-    check: (coins: Coin[]) => coins.some(c => c.rarity >= 70),
+    check: (coins: Coin[]) =>
+      coins.some(c => c.rarity >= 70),
   },
+
+  // CONDITION (FIXED)
   {
     id: 12,
     category: "Condition",
     name: "Brilliant",
     points: 100,
     check: (coins: Coin[]) =>
-      coins.some(c => c.userCondition !== undefined && c.userCondition >= 12),
+      coins.some(c => c.condition >= 12),
   },
   {
     id: 13,
@@ -109,6 +120,6 @@ export const achievements: Achievement[] = [
     name: "Perfection",
     points: 1000,
     check: (coins: Coin[]) =>
-      coins.some(c => c.userCondition !== undefined && c.userCondition >= 13),
+      coins.some(c => c.condition >= 13),
   },
 ];
