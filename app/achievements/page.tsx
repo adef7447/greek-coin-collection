@@ -5,24 +5,37 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import { achievements } from "../../lib/achievements";
 
+type Achievement = {
+  id: number;
+  name: string;
+  points: number;
+  category: string;
+  check: (coins: any[]) => boolean;
+};
+
 export default function AchievementsPage() {
   const [completed, setCompleted] = useState<number[]>([]);
 
   useEffect(() => {
-    load();
+    loadAchievements();
   }, []);
 
-  async function load() {
+  async function loadAchievements() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
     if (!user) return;
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("user_achievements")
       .select("achievement_id")
       .eq("user_id", user.id);
+
+    if (error) {
+      console.log(error);
+      return;
+    }
 
     setCompleted(data?.map((a) => a.achievement_id) || []);
   }
@@ -37,6 +50,7 @@ export default function AchievementsPage() {
 
   return (
     <main className="min-h-screen p-8 bg-blue-50 text-black">
+
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-4xl font-bold">Achievements</h1>
 
@@ -50,15 +64,17 @@ export default function AchievementsPage() {
 
       {/* COMPLETED */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {completedList.map((achievement) => (
+        {completedList.map((a) => (
           <div
-            key={achievement.id}
+            key={a.id}
             className="border p-4 rounded shadow bg-green-100 border-green-500 text-green-800"
           >
-            <h2 className="text-2xl font-bold">{achievement.name}</h2>
+            <h2 className="text-2xl font-bold">{a.name}</h2>
+
+            <p className="mt-2">Category: {a.category}</p>
 
             <p className="mt-2 font-bold">
-              Reward: {achievement.points} points
+              Reward: {a.points} points
             </p>
 
             <p className="mt-4 font-bold text-green-700">
@@ -69,19 +85,21 @@ export default function AchievementsPage() {
       </div>
 
       {/* GAP */}
-      <div className="my-10 border-t border-gray-300"></div>
+      <div className="my-10 border-t border-gray-300" />
 
       {/* NOT COMPLETED */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {notCompletedList.map((achievement) => (
+        {notCompletedList.map((a) => (
           <div
-            key={achievement.id}
+            key={a.id}
             className="border p-4 rounded shadow bg-white"
           >
-            <h2 className="text-2xl font-bold">{achievement.name}</h2>
+            <h2 className="text-2xl font-bold">{a.name}</h2>
+
+            <p className="mt-2">Category: {a.category}</p>
 
             <p className="mt-2 font-bold">
-              Reward: {achievement.points} points
+              Reward: {a.points} points
             </p>
 
             <p className="mt-4 font-bold text-gray-500">
@@ -90,6 +108,7 @@ export default function AchievementsPage() {
           </div>
         ))}
       </div>
+
     </main>
   );
 }
