@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { checkAchievements } from "../lib/checkAchievements";
 
 export default function Home() {
   function getScoreFromRarity(rarity: number) {
@@ -155,18 +156,19 @@ async function addToCollection(coinId: number, rarity: number) {
     return;
   }
 
-  const { error: scoreError } = await supabase.rpc(
-    "increment_score",
-    {
-      user_id_input: user.id,
-      amount: scoreToAdd,
-    }
-  );
-
-  if (scoreError) {
-    console.log(scoreError);
+const { error: scoreError } = await supabase.rpc(
+  "increment_score",
+  {
+    user_id_input: user.id,
+    amount: scoreToAdd,
   }
+);
 
+if (scoreError) {
+  console.log(scoreError);
+}
+
+await checkAchievements(user.id);
   setUserScore((prev) => prev + scoreToAdd);
 
   alert("Coin added + score updated!");

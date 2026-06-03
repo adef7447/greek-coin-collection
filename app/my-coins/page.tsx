@@ -38,11 +38,13 @@ export default function MyCoins() {
   }
 
   await supabase.rpc("decrement_score", {
-    user_id_input: user.id,
-    amount: scoreToRemove,
-  });
+  user_id_input: user.id,
+  amount: scoreToRemove,
+});
 
-  alert("Coin removed + score updated!");
+await checkAchievements(user.id);
+
+alert("Coin removed + score updated!");
 }
 
   async function getMyCoins() {
