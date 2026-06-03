@@ -228,6 +228,12 @@ Greek Coin Collection
   >
     Leaderboard
   </Link>
+  <Link
+  href="/achievements"
+  className="text-blue-600 underline"
+>
+  Achievements
+</Link>
 
 </div>
 
