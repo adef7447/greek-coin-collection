@@ -5,6 +5,16 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 
 export default function Home() {
+  function getScoreFromRarity(rarity: number) {
+  if (rarity >= 70) return 100000; // Unique
+  if (rarity >= 60) return 5000;   // Mythic
+  if (rarity >= 50) return 500;    // Legendary
+  if (rarity >= 40) return 100;    // Epic
+  if (rarity >= 30) return 30;     // Rare
+  if (rarity >= 20) return 10;     // Uncommon
+  if (rarity >= 10) return 3;      // Common
+  return 1;                        // Basic
+}
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -113,37 +123,54 @@ const { data, error } = await supabase
     }
   }
 
-  async function addToCollection(coinId: number) {
+async function addToCollection(coinId: number, rarity: number) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      alert("Login first");
-      return;
-    }
-    const damage = Number(
-  `${damaged}${bent}${cleaned}${environmental}${holed}`
-);
-
-const { error } = await supabase
-  .from("user_coins")
-  .insert([
-    {
-      user_id: user.id,
-      coin_id: coinId,
-      condition: condition,
-      damage: damage,
-    },
-  ]);
-
-    if (error) {
-      alert(error.message);
-    } else {
-      alert("Coin added!");
-    }
+  if (!user) {
+    alert("Login first");
+    return;
   }
+
+  const damage = Number(
+    `${damaged}${bent}${cleaned}${environmental}${holed}`
+  );
+
+  const scoreToAdd = getScoreFromRarity(rarity);
+
+  const { error } = await supabase
+    .from("user_coins")
+    .insert([
+      {
+        user_id: user.id,
+        coin_id: coinId,
+        condition: condition,
+        damage: damage,
+      },
+    ]);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  const { error: scoreError } = await supabase.rpc(
+    "increment_score",
+    {
+      user_id_input: user.id,
+      amount: scoreToAdd,
+    }
+  );
+
+  if (scoreError) {
+    console.log(scoreError);
+  }
+
+  setUserScore((prev) => prev + scoreToAdd);
+
+  alert("Coin added + score updated!");
+}
 
   useEffect(() => {
 
@@ -445,8 +472,7 @@ Greek Coin Collection
 </div>
             <button
               className="bg-green-600 text-white px-4 py-2 mt-4 rounded"
-              onClick={() => addToCollection(coin.id)}
-            >
+onClick={() => addToCollection(coin.id, coin.rarity)}            >
               I Own This
             </button>
 

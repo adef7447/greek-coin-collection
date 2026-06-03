@@ -5,14 +5,26 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
 export default function MyCoins() {
+  function getScoreFromRarity(rarity: number) {
+  if (rarity >= 70) return 100000; // Unique
+  if (rarity >= 60) return 5000;   // Mythic
+  if (rarity >= 50) return 500;    // Legendary
+  if (rarity >= 40) return 100;    // Epic
+  if (rarity >= 30) return 30;     // Rare
+  if (rarity >= 20) return 10;     // Uncommon
+  if (rarity >= 10) return 3;      // Common
+  return 1;                        // Basic
+}
   const [coins, setCoins] = useState<any[]>([]);
   const [userDisplayName, setUserDisplayName] = useState("");
-  async function removeCoin(coinId: number) {
+  async function removeCoin(coinId: number, rarity: number) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) return;
+
+  const scoreToRemove = getScoreFromRarity(rarity);
 
   const { error } = await supabase
     .from("user_coins")
@@ -20,14 +32,17 @@ export default function MyCoins() {
     .eq("user_id", user.id)
     .eq("coin_id", coinId);
 
- if (error) {
-  console.log(error);
-  alert(error.message);
-} else {
-  console.log("Deleted");
-  alert("Coin removed!");
-  getMyCoins();
-}
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  await supabase.rpc("decrement_score", {
+    user_id_input: user.id,
+    amount: scoreToRemove,
+  });
+
+  alert("Coin removed + score updated!");
 }
 
   async function getMyCoins() {
@@ -278,12 +293,8 @@ export default function MyCoins() {
             <button
   className="bg-red-600 text-white px-4 py-2 mt-4 rounded"
   onClick={() => {
-    if (
-      confirm(
-        "Remove this coin from your collection?"
-      )
-    ) {
-      removeCoin(coin.id);
+    if (confirm("Remove this coin from your collection?")) {
+      removeCoin(coin.id, coin.rarity);
     }
   }}
 >
