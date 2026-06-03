@@ -213,12 +213,23 @@ Greek Coin Collection
   Score: {userScore}
 </p>
 
-          <Link
-            href="/my-coins"
-            className="text-blue-600 underline"
-          >
-            My Coins
-          </Link>
+          <div className="flex gap-4">
+
+  <Link
+    href="/my-coins"
+    className="text-blue-600 underline"
+  >
+    My Coins
+  </Link>
+
+  <Link
+    href="/leaderboard"
+    className="text-blue-600 underline"
+  >
+    Leaderboard
+  </Link>
+
+</div>
 
         </div>
       )}
