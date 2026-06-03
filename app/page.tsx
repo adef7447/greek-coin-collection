@@ -96,7 +96,18 @@ const { data: profile } = await supabase
 
 setUserDisplayName(profile?.display_name || "");
 setUserScore(profile?.score || 0);
-      alert("Logged in!");
+
+await checkAchievements(data.user.id);
+
+const { data: updatedProfile } = await supabase
+  .from("profiles")
+  .select("score")
+  .eq("id", data.user.id)
+  .single();
+
+setUserScore(updatedProfile?.score || 0);
+
+alert("Logged in!");
     }
   }
 
@@ -140,6 +151,7 @@ async function addToCollection(coinId: number, rarity: number) {
 
   const scoreToAdd = getScoreFromRarity(rarity);
 
+  // 1. Insert coin
   const { error } = await supabase
     .from("user_coins")
     .insert([
@@ -156,20 +168,30 @@ async function addToCollection(coinId: number, rarity: number) {
     return;
   }
 
-const { error: scoreError } = await supabase.rpc(
-  "increment_score",
-  {
-    user_id_input: user.id,
-    amount: scoreToAdd,
+  // 2. Add score
+  const { error: scoreError } = await supabase.rpc(
+    "increment_score",
+    {
+      user_id_input: user.id,
+      amount: scoreToAdd,
+    }
+  );
+
+  if (scoreError) {
+    console.log(scoreError);
   }
-);
 
-if (scoreError) {
-  console.log(scoreError);
-}
+  // 3. Update achievements
+  await checkAchievements(user.id);
 
-await checkAchievements(user.id);
-  setUserScore((prev) => prev + scoreToAdd);
+  // 4. ALWAYS refresh score from DB (important fix)
+  const { data: updatedProfile } = await supabase
+    .from("profiles")
+    .select("score")
+    .eq("id", user.id)
+    .single();
+
+  setUserScore(updatedProfile?.score || 0);
 
   alert("Coin added + score updated!");
 }
@@ -185,6 +207,7 @@ await checkAchievements(user.id);
       } = await supabase.auth.getUser();
 
 if (user) {
+  await checkAchievements(user.id);
 
 const { data: profile } = await supabase
   .from("profiles")
