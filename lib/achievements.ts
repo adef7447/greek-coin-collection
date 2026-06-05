@@ -1,5 +1,5 @@
 export type Coin = {
-  id?: number; 
+  id: number; // Changed from optional to required for strict ID mapping
   year: number;
   rarity: number;
   metal: string;
@@ -17,7 +17,6 @@ export type Achievement = {
   name: string;
   points: number;
   check: (coins: Coin[], catalogTotals: CatalogTotals) => boolean;
-  // New function to calculate running progress dynamically
   getProgress: (coins: Coin[], catalogTotals: CatalogTotals) => { current: number; target: number };
 };
 
@@ -54,13 +53,15 @@ export const achievements: Achievement[] = [
     check: (coins, catalogTotals) => {
       const targetYear = 1828;
       const totalRequired = catalogTotals.years[targetYear] ?? 0;
-      const userUniqueCount = new Set(coins.filter((c) => Number(c.year) === targetYear).map((c) => c.rarity)).size;
+      // FIX: Map by unique coin ID instead of generic rarity number
+      const userUniqueCount = new Set(coins.filter((c) => Number(c.year) === targetYear).map((c) => c.id)).size;
       return userUniqueCount >= totalRequired && totalRequired > 0;
     },
     getProgress: (coins, catalogTotals) => {
       const targetYear = 1828;
       const totalRequired = catalogTotals.years[targetYear] ?? 0;
-      const userUniqueCount = new Set(coins.filter((c) => Number(c.year) === targetYear).map((c) => c.rarity)).size;
+      // FIX: Map by unique coin ID instead of generic rarity number
+      const userUniqueCount = new Set(coins.filter((c) => Number(c.year) === targetYear).map((c) => c.id)).size;
       return { current: userUniqueCount, target: totalRequired };
     }
   },
@@ -71,12 +72,14 @@ export const achievements: Achievement[] = [
     points: 100,
     check: (coins, catalogTotals) => {
       const totalRequired = catalogTotals.centuries["19th"] ?? 0;
-      const userUnique19thCount = new Set(coins.filter((c) => Number(c.year) >= 1800 && Number(c.year) <= 1899).map((c) => c.rarity)).size;
+      // FIX: Map by unique coin ID instead of generic rarity number
+      const userUnique19thCount = new Set(coins.filter((c) => Number(c.year) >= 1800 && Number(c.year) <= 1899).map((c) => c.id)).size;
       return userUnique19thCount >= totalRequired && totalRequired > 0;
     },
     getProgress: (coins, catalogTotals) => {
       const totalRequired = catalogTotals.centuries["19th"] ?? 0;
-      const userUnique19thCount = new Set(coins.filter((c) => Number(c.year) >= 1800 && Number(c.year) <= 1899).map((c) => c.rarity)).size;
+      // FIX: Map by unique coin ID instead of generic rarity number
+      const userUnique19thCount = new Set(coins.filter((c) => Number(c.year) >= 1800 && Number(c.year) <= 1899).map((c) => c.id)).size;
       return { current: userUnique19thCount, target: totalRequired };
     }
   },
@@ -166,12 +169,14 @@ export const achievements: Achievement[] = [
     points: 99,
     check: (coins: Coin[], catalogTotals: CatalogTotals) => {
       const totalRequired = catalogTotals.years[year] ?? 0;
-      const userUniqueCount = new Set(coins.filter((c) => Number(c.year) === year).map((c) => c.rarity)).size;
+      // FIX: Map by unique coin ID instead of generic rarity number
+      const userUniqueCount = new Set(coins.filter((c) => Number(c.year) === year).map((c) => c.id)).size;
       return userUniqueCount >= totalRequired && totalRequired > 0;
     },
     getProgress: (coins: Coin[], catalogTotals: CatalogTotals) => {
       const totalRequired = catalogTotals.years[year] ?? 0;
-      const userUniqueCount = new Set(coins.filter((c) => Number(c.year) === year).map((c) => c.rarity)).size;
+      // FIX: Map by unique coin ID instead of generic rarity number
+      const userUniqueCount = new Set(coins.filter((c) => Number(c.year) === year).map((c) => c.id)).size;
       return { current: userUniqueCount, target: totalRequired };
     }
   }))

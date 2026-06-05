@@ -22,10 +22,10 @@ export default function AchievementsPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 1. Fetch ALL master coins
+    // 1. Fetch ALL master coins - MUST select "id" to count unique items correctly
     const { data: masterCoins, error: masterError } = await supabase
       .from("coins")
-      .select("year, rarity");
+      .select("id, year, rarity");
 
     if (masterError) {
       console.error("Error fetching master coins:", masterError);
@@ -43,11 +43,13 @@ export default function AchievementsPage() {
       if (isNaN(y)) return;
 
       if (!uniqueYearVariants[y]) uniqueYearVariants[y] = new Set();
-      uniqueYearVariants[y].add(coin.rarity);
+      // FIX: Use coin.id instead of coin.rarity to get the accurate target amount
+      uniqueYearVariants[y].add(coin.id);
 
       if (y >= 1800 && y <= 1899) {
         if (!uniqueCenturyVariants["19th"]) uniqueCenturyVariants["19th"] = new Set();
-        uniqueCenturyVariants["19th"].add(coin.rarity);
+        // FIX: Use coin.id instead of coin.rarity
+        uniqueCenturyVariants["19th"].add(coin.id);
       }
     });
 
@@ -67,6 +69,7 @@ export default function AchievementsPage() {
       .select(`
         condition,
         coins (
+          id,
           year,
           rarity,
           metal
@@ -80,6 +83,7 @@ export default function AchievementsPage() {
     }
 
     const loadedCoins: Coin[] = (userCoinsData || []).map((uc: any) => ({
+      id: uc.coins?.id || 0, // FIX: Pass the item identification down to the checker
       year: uc.coins?.year || 0,
       rarity: uc.coins?.rarity || 0,
       metal: uc.coins?.metal || "",

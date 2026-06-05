@@ -10,10 +10,10 @@ type Coin = {
 };
 
 export async function checkAchievements(userId: string) {
-  // 1. Fetch ALL master coins from Supabase
+  // 1. Fetch ALL master coins from Supabase (FIXED: Added id to select statement)
   const { data: masterCoins, error: masterError } = await supabase
     .from("coins")
-    .select("year, rarity");
+    .select("id, year, rarity");
 
   if (masterError) {
     console.error("Error fetching master coins in calculation script:", masterError);
@@ -33,12 +33,14 @@ export async function checkAchievements(userId: string) {
 
     // Track unique variants per year
     if (!uniqueYearVariants[y]) uniqueYearVariants[y] = new Set();
-    uniqueYearVariants[y].add(coin.rarity);
+    // FIXED: Now tracking unique coins by id rather than a non-unique rarity value
+    uniqueYearVariants[y].add(coin.id);
 
     // Track unique variants for the 19th century (1800-1899)
     if (y >= 1800 && y <= 1899) {
       if (!uniqueCenturyVariants["19th"]) uniqueCenturyVariants["19th"] = new Set();
-      uniqueCenturyVariants["19th"].add(coin.rarity);
+      // FIXED: Now tracking unique coins by id rather than a non-unique rarity value
+      uniqueCenturyVariants["19th"].add(coin.id);
     }
   });
 
