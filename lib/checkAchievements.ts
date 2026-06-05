@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { achievements } from "./achievements";
+import { achievements, getScoreFromRarity, CatalogTotals } from "./achievements";
 
 type Coin = {
   id: number;
@@ -10,7 +10,7 @@ type Coin = {
 };
 
 export async function checkAchievements(userId: string) {
-  // 1. Fetch ALL master coins from Supabase (FIXED: Added id to select statement)
+  // 1. Fetch ALL master coins from Supabase
   const { data: masterCoins, error: masterError } = await supabase
     .from("coins")
     .select("id, year, rarity");
@@ -23,6 +23,7 @@ export async function checkAchievements(userId: string) {
   // 2. Initialize dynamic tracking records for any custom years
   const dynamicYears: Record<number, number> = {};
   const dynamicCenturies: Record<string, number> = {};
+  const yearRawPointsTracker: Record<number, number> = {};
 
   const uniqueYearVariants: Record<number, Set<number>> = {};
   const uniqueCenturyVariants: Record<string, Set<number>> = {};
@@ -33,27 +34,40 @@ export async function checkAchievements(userId: string) {
 
     // Track unique variants per year
     if (!uniqueYearVariants[y]) uniqueYearVariants[y] = new Set();
-    // FIXED: Now tracking unique coins by id rather than a non-unique rarity value
     uniqueYearVariants[y].add(coin.id);
+
+    // Sum up raw scores using our rarity point matrix
+    const coinScore = getScoreFromRarity(coin.rarity);
+    yearRawPointsTracker[y] = (yearRawPointsTracker[y] || 0) + coinScore;
 
     // Track unique variants for the 19th century (1800-1899)
     if (y >= 1800 && y <= 1899) {
       if (!uniqueCenturyVariants["19th"]) uniqueCenturyVariants["19th"] = new Set();
-      // FIXED: Now tracking unique coins by id rather than a non-unique rarity value
       uniqueCenturyVariants["19th"].add(coin.id);
     }
   });
 
-  // Convert mapping sets back into numeric lengths
+  // Convert mapping sets back into numeric lengths and half-value math pools
+  const dynamicYearPoints: Record<number, number> = {};
   Object.keys(uniqueYearVariants).forEach((y) => {
-    dynamicYears[Number(y)] = uniqueYearVariants[Number(y)].size;
+    const yearNum = Number(y);
+    dynamicYears[yearNum] = uniqueYearVariants[yearNum].size;
+    
+    // Calculate achievement reward: half of all combined points, rounded down
+    const totalCombinedPoints = yearRawPointsTracker[yearNum] || 0;
+    dynamicYearPoints[yearNum] = Math.floor(totalCombinedPoints / 2);
   });
+
   if (uniqueCenturyVariants["19th"]) {
     dynamicCenturies["19th"] = uniqueCenturyVariants["19th"].size;
   }
 
   // Combine into the structural shape required by achievements.ts
-  const catalogTotals = { years: dynamicYears, centuries: dynamicCenturies };
+  const catalogTotals: CatalogTotals = { 
+    years: dynamicYears, 
+    centuries: dynamicCenturies, 
+    yearPointsPool: dynamicYearPoints 
+  };
 
   // 3. Load user's owned coins
   const { data: userCoins, error } = await supabase
@@ -103,10 +117,13 @@ export async function checkAchievements(userId: string) {
 
   // 5. Check every achievement
   for (const achievement of achievements) {
-    // Pass both ownedCoins AND the new dynamic catalogTotals tracking structure
     const completed = achievement.check(ownedCoins, catalogTotals);
-
     const alreadyUnlocked = unlockedNames.has(achievement.name);
+
+    // Determine exact points contextually (dynamic calculation override vs static rule)
+    const finalPoints = achievement.getDynamicPoints 
+      ? achievement.getDynamicPoints(catalogTotals) 
+      : achievement.points;
 
     // Unlock achievement
     if (completed && !alreadyUnlocked) {
@@ -115,13 +132,13 @@ export async function checkAchievements(userId: string) {
         .insert({
           user_id: userId,
           achievement_name: achievement.name,
-          points: achievement.points,
+          points: finalPoints,
         });
 
       if (!insertError) {
         await supabase.rpc("increment_score", {
           user_id_input: userId,
-          amount: achievement.points,
+          amount: finalPoints,
         });
       }
     }
@@ -136,7 +153,7 @@ export async function checkAchievements(userId: string) {
 
       await supabase.rpc("decrement_score", {
         user_id_input: userId,
-        amount: achievement.points,
+        amount: finalPoints,
       });
     }
   }

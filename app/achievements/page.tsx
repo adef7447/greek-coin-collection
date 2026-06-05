@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { achievements, Coin, CatalogTotals } from "../../lib/achievements";
+import { achievements, Coin, CatalogTotals, getScoreFromRarity } from "../../lib/achievements";
 
 export default function AchievementsPage() {
   const [completedNames, setCompletedNames] = useState<string[]>([]);
@@ -12,6 +12,7 @@ export default function AchievementsPage() {
   const [catalogTotals, setCatalogTotals] = useState<CatalogTotals>({
     years: {},
     centuries: {},
+    yearPointsPool: {}, // Initialized empty pool tracking state
   });
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function AchievementsPage() {
 
     const dynamicYears: Record<number, number> = {};
     const dynamicCenturies: Record<string, number> = {};
+    const yearRawPointsTracker: Record<number, number> = {};
 
     const uniqueYearVariants: Record<number, Set<number>> = {};
     const uniqueCenturyVariants: Record<string, Set<number>> = {};
@@ -43,24 +45,38 @@ export default function AchievementsPage() {
       if (isNaN(y)) return;
 
       if (!uniqueYearVariants[y]) uniqueYearVariants[y] = new Set();
-      // FIX: Use coin.id instead of coin.rarity to get the accurate target amount
+      // Use coin.id instead of coin.rarity to get the accurate target amount
       uniqueYearVariants[y].add(coin.id);
+
+      // Track the total point calculations for this year grouping
+      const coinScore = getScoreFromRarity(coin.rarity);
+      yearRawPointsTracker[y] = (yearRawPointsTracker[y] || 0) + coinScore;
 
       if (y >= 1800 && y <= 1899) {
         if (!uniqueCenturyVariants["19th"]) uniqueCenturyVariants["19th"] = new Set();
-        // FIX: Use coin.id instead of coin.rarity
         uniqueCenturyVariants["19th"].add(coin.id);
       }
     });
 
+    // Halve the combined year point value pools (rounded down to nearest int)
+    const dynamicYearPoints: Record<number, number> = {};
     Object.keys(uniqueYearVariants).forEach((y) => {
-      dynamicYears[Number(y)] = uniqueYearVariants[Number(y)].size;
+      const yearNum = Number(y);
+      dynamicYears[yearNum] = uniqueYearVariants[yearNum].size;
+      
+      const totalCombinedPoints = yearRawPointsTracker[yearNum] || 0;
+      dynamicYearPoints[yearNum] = Math.floor(totalCombinedPoints / 2);
     });
+
     if (uniqueCenturyVariants["19th"]) {
       dynamicCenturies["19th"] = uniqueCenturyVariants["19th"].size;
     }
 
-    const currentTotals = { years: dynamicYears, centuries: dynamicCenturies };
+    const currentTotals: CatalogTotals = { 
+      years: dynamicYears, 
+      centuries: dynamicCenturies, 
+      yearPointsPool: dynamicYearPoints 
+    };
     setCatalogTotals(currentTotals);
 
     // 2. Fetch the user's CURRENT coins
@@ -83,7 +99,7 @@ export default function AchievementsPage() {
     }
 
     const loadedCoins: Coin[] = (userCoinsData || []).map((uc: any) => ({
-      id: uc.coins?.id || 0, // FIX: Pass the item identification down to the checker
+      id: uc.coins?.id || 0, // Pass the item identification down to the checker
       year: uc.coins?.year || 0,
       rarity: uc.coins?.rarity || 0,
       metal: uc.coins?.metal || "",
@@ -111,7 +127,10 @@ export default function AchievementsPage() {
     if (lostAchievements.length > 0) {
       const pointsToDeduct = achievements
         .filter(a => lostAchievements.includes(a.name))
-        .reduce((sum, a) => sum + a.points, 0);
+        .reduce((sum, a) => {
+          const reward = a.getDynamicPoints ? a.getDynamicPoints(currentTotals) : a.points;
+          return sum + reward;
+        }, 0);
 
       await supabase
         .from("user_achievements")
@@ -162,6 +181,10 @@ export default function AchievementsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {completedList.map((achievement) => {
           const progress = achievement.getProgress(userCoins, catalogTotals);
+          const currentPoints = achievement.getDynamicPoints 
+            ? achievement.getDynamicPoints(catalogTotals) 
+            : achievement.points;
+            
           return (
             <div
               key={achievement.id}
@@ -169,7 +192,7 @@ export default function AchievementsPage() {
             >
               <h3 className="text-2xl font-bold">{achievement.name}</h3>
               <p className="mt-2">Category: {achievement.category}</p>
-              <p className="mt-2 font-bold">Reward: {achievement.points} points</p>
+              <p className="mt-2 font-bold">Reward: {currentPoints} points</p>
               <p className="mt-2 text-sm bg-green-200 inline-block px-2 py-1 rounded font-mono">
                 Progress: {progress.current} / {progress.target}
               </p>
@@ -188,6 +211,10 @@ export default function AchievementsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {notCompletedList.map((achievement) => {
           const progress = achievement.getProgress(userCoins, catalogTotals);
+          const currentPoints = achievement.getDynamicPoints 
+            ? achievement.getDynamicPoints(catalogTotals) 
+            : achievement.points;
+
           return (
             <div
               key={achievement.id}
@@ -195,7 +222,7 @@ export default function AchievementsPage() {
             >
               <h3 className="text-2xl font-bold">{achievement.name}</h3>
               <p className="mt-2">Category: {achievement.category}</p>
-              <p className="mt-2 font-bold">Reward: {achievement.points} points</p>
+              <p className="mt-2 font-bold">Reward: {currentPoints} points</p>
               <p className="mt-2 text-sm bg-gray-100 inline-block px-2 py-1 rounded font-mono text-gray-700 border">
                 Progress: {progress.current} / {progress.target}
               </p>
