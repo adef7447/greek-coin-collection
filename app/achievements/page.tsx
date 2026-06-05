@@ -3,35 +3,115 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
-import { achievements } from "../../lib/achievements";
+import { achievements, Coin, CatalogTotals } from "../../lib/achievements";
 
 export default function AchievementsPage() {
   const [completedNames, setCompletedNames] = useState<string[]>([]);
+  const [catalogTotals, setCatalogTotals] = useState<CatalogTotals>({
+    total1828Coins: 0,
+    total19thCenturyCoins: 0,
+  });
 
   useEffect(() => {
     loadAchievements();
   }, []);
 
   async function loadAchievements() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const { data, error } = await supabase
+    // 1. Fetch ALL master coins to determine the absolute targets dynamically
+    const { data: masterCoins, error: masterError } = await supabase
+      .from("coins")
+      .select("year, rarity");
+
+    if (masterError) {
+      console.error("Error fetching master coins:", masterError);
+      return;
+    }
+
+    // Calculate total possible unique variants existing in your game
+    const total1828 = new Set(masterCoins?.filter(c => Number(c.year) === 1828).map(c => c.rarity)).size;
+    const total19th = new Set(masterCoins?.filter(c => {
+      const y = Number(c.year);
+      return y >= 1800 && y <= 1899;
+    }).map(c => c.rarity)).size;
+
+    const currentTotals = { total1828Coins: total1828, total19thCenturyCoins: total19th };
+    setCatalogTotals(currentTotals);
+
+    // 2. Fetch the user's CURRENT coins to validate against targets
+    const { data: userCoinsData, error: coinsError } = await supabase
+      .from("user_coins")
+      .select(`
+        condition,
+        coins (
+          year,
+          rarity,
+          metal
+        )
+      `)
+      .eq("user_id", user.id);
+
+    if (coinsError) {
+      console.error("Error fetching user inventory:", coinsError);
+      return;
+    }
+
+    // Flatten relation into your local Coin[] type structure
+    const userCoins: Coin[] = (userCoinsData || []).map((uc: any) => ({
+      year: uc.coins.year,
+      rarity: uc.coins.rarity,
+      metal: uc.coins.metal,
+      condition: uc.condition,
+    }));
+
+    // 3. Evaluate dynamically which achievements match right now
+    const validCompletedNames = achievements
+      .filter((achievement) => achievement.check(userCoins, currentTotals))
+      .map((achievement) => achievement.name);
+
+    setCompletedNames(validCompletedNames);
+
+    // 4. Sync the database state so stale entries vanish and scores update
+    const { data: dbAchievements } = await supabase
       .from("user_achievements")
       .select("achievement_name")
       .eq("user_id", user.id);
 
-    if (error) {
-      console.log(error);
-      return;
-    }
+    const dbNames: string[] = dbAchievements?.map(a => a.achievement_name) || [];
+    const lostAchievements = dbNames.filter(name => !validCompletedNames.includes(name));
 
-    setCompletedNames(
-      data?.map((a: any) => a.achievement_name) || []
-    );
+    if (lostAchievements.length > 0) {
+      // Calculate total points to deduct based on your local achievements settings
+      const pointsToDeduct = achievements
+        .filter(a => lostAchievements.includes(a.name))
+        .reduce((sum, a) => sum + a.points, 0);
+
+      // Remove the unearned achievement rows from the user's profile
+      await supabase
+        .from("user_achievements")
+        .delete()
+        .eq("user_id", user.id)
+        .in("achievement_name", lostAchievements);
+
+      // Fetch the user's profile to adjust their running total score
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("score")
+        .eq("id", user.id)
+        .single();
+
+      if (profile) {
+        // Enforce a minimum floor of 0 so scores never drop below zero
+        const newScore = Math.max(0, (profile.score || 0) - pointsToDeduct);
+
+        await supabase
+          .from("profiles")
+          .update({ score: newScore })
+          .eq("id", user.id);
+      }
+    }
   }
 
   const completedList = achievements.filter((a) =>
@@ -64,21 +144,10 @@ export default function AchievementsPage() {
             key={achievement.id}
             className="border p-4 rounded shadow bg-green-100 border-green-500 text-green-800"
           >
-            <h3 className="text-2xl font-bold">
-              {achievement.name}
-            </h3>
-
-            <p className="mt-2">
-              Category: {achievement.category}
-            </p>
-
-            <p className="mt-2 font-bold">
-              Reward: {achievement.points} points
-            </p>
-
-            <p className="mt-4 font-bold">
-              ✅ Completed
-            </p>
+            <h3 className="text-2xl font-bold">{achievement.name}</h3>
+            <p className="mt-2">Category: {achievement.category}</p>
+            <p className="mt-2 font-bold">Reward: {achievement.points} points</p>
+            <p className="mt-4 font-bold">✅ Completed</p>
           </div>
         ))}
       </div>
@@ -95,21 +164,10 @@ export default function AchievementsPage() {
             key={achievement.id}
             className="border p-4 rounded shadow bg-white"
           >
-            <h3 className="text-2xl font-bold">
-              {achievement.name}
-            </h3>
-
-            <p className="mt-2">
-              Category: {achievement.category}
-            </p>
-
-            <p className="mt-2 font-bold">
-              Reward: {achievement.points} points
-            </p>
-
-            <p className="mt-4 font-bold text-gray-500">
-              Not Completed
-            </p>
+            <h3 className="text-2xl font-bold">{achievement.name}</h3>
+            <p className="mt-2">Category: {achievement.category}</p>
+            <p className="mt-2 font-bold">Reward: {achievement.points} points</p>
+            <p className="mt-4 font-bold text-gray-500">Not Completed</p>
           </div>
         ))}
       </div>

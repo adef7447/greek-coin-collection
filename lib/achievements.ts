@@ -1,8 +1,14 @@
 export type Coin = {
+  id?: number; // Added if your coins have a unique identifier row
   year: number;
   rarity: number;
   metal: string;
   condition: number;
+};
+
+export type CatalogTotals = {
+  total1828Coins: number;
+  total19thCenturyCoins: number;
 };
 
 export type Achievement = {
@@ -10,7 +16,7 @@ export type Achievement = {
   category: string;
   name: string;
   points: number;
-  check: (coins: Coin[]) => boolean;
+  check: (coins: Coin[], catalogTotals: CatalogTotals) => boolean;
 };
 
 export const achievements: Achievement[] = [
@@ -40,19 +46,34 @@ export const achievements: Achievement[] = [
     category: "Years",
     name: "1828 Collector",
     points: 50,
-    // Using Number() protects you if the database returns the year as a string
-    check: (coins) => coins.some((c) => Number(c.year) === 1828),
+    check: (coins, catalogTotals) => {
+      // 1. Filter down to user's 1828 coins
+      // 2. Map by rarity or an ID to ensure we look at UNIQUE types, not duplicates
+      const userUnique1828Count = new Set(
+        coins.filter((c) => Number(c.year) === 1828).map((c) => c.rarity)
+      ).size;
+
+      // True only if they own every single unique 1828 coin variant in the catalog
+      return userUnique1828Count >= catalogTotals.total1828Coins && catalogTotals.total1828Coins > 0;
+    },
   },
   {
     id: 5,
     category: "Years",
     name: "19th Century",
     points: 100,
-    check: (coins) =>
-      coins.some((c) => {
-        const yearNum = Number(c.year);
-        return yearNum >= 1800 && yearNum <= 1899;
-      }),
+    check: (coins, catalogTotals) => {
+      const userUnique19thCount = new Set(
+        coins
+          .filter((c) => {
+            const y = Number(c.year);
+            return y >= 1800 && y <= 1899;
+          })
+          .map((c) => c.rarity)
+      ).size;
+
+      return userUnique19thCount >= catalogTotals.total19thCenturyCoins && catalogTotals.total19thCenturyCoins > 0;
+    },
   },
   {
     id: 6,
@@ -66,16 +87,14 @@ export const achievements: Achievement[] = [
     category: "Materials",
     name: "Silver Enthusiast",
     points: 100,
-    check: (coins) =>
-      coins.filter((c) => c.metal === "Silver").length >= 10,
+    check: (coins) => coins.filter((c) => c.metal === "Silver").length >= 10,
   },
   {
     id: 8,
     category: "Materials",
     name: "Silver Hoarder",
     points: 500,
-    check: (coins) =>
-      coins.filter((c) => c.metal === "Silver").length >= 50,
+    check: (coins) => coins.filter((c) => c.metal === "Silver").length >= 50,
   },
   {
     id: 9,
