@@ -7,9 +7,11 @@ import { achievements, Coin, CatalogTotals } from "../../lib/achievements";
 
 export default function AchievementsPage() {
   const [completedNames, setCompletedNames] = useState<string[]>([]);
+  // Store the active inventory locally to reference inside the UI card loop
+  const [userCoins, setUserCoins] = useState<Coin[]>([]);
   const [catalogTotals, setCatalogTotals] = useState<CatalogTotals>({
-    total1828Coins: 0,
-    total19thCenturyCoins: 0,
+    years: {},
+    centuries: {},
   });
 
   useEffect(() => {
@@ -20,7 +22,7 @@ export default function AchievementsPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 1. Fetch ALL master coins to determine the absolute targets dynamically
+    // 1. Fetch ALL master coins
     const { data: masterCoins, error: masterError } = await supabase
       .from("coins")
       .select("year, rarity");
@@ -30,17 +32,36 @@ export default function AchievementsPage() {
       return;
     }
 
-    // Calculate total possible unique variants existing in your game
-    const total1828 = new Set(masterCoins?.filter(c => Number(c.year) === 1828).map(c => c.rarity)).size;
-    const total19th = new Set(masterCoins?.filter(c => {
-      const y = Number(c.year);
-      return y >= 1800 && y <= 1899;
-    }).map(c => c.rarity)).size;
+    const dynamicYears: Record<number, number> = {};
+    const dynamicCenturies: Record<string, number> = {};
 
-    const currentTotals = { total1828Coins: total1828, total19thCenturyCoins: total19th };
+    const uniqueYearVariants: Record<number, Set<number>> = {};
+    const uniqueCenturyVariants: Record<string, Set<number>> = {};
+
+    masterCoins?.forEach((coin) => {
+      const y = Number(coin.year);
+      if (isNaN(y)) return;
+
+      if (!uniqueYearVariants[y]) uniqueYearVariants[y] = new Set();
+      uniqueYearVariants[y].add(coin.rarity);
+
+      if (y >= 1800 && y <= 1899) {
+        if (!uniqueCenturyVariants["19th"]) uniqueCenturyVariants["19th"] = new Set();
+        uniqueCenturyVariants["19th"].add(coin.rarity);
+      }
+    });
+
+    Object.keys(uniqueYearVariants).forEach((y) => {
+      dynamicYears[Number(y)] = uniqueYearVariants[Number(y)].size;
+    });
+    if (uniqueCenturyVariants["19th"]) {
+      dynamicCenturies["19th"] = uniqueCenturyVariants["19th"].size;
+    }
+
+    const currentTotals = { years: dynamicYears, centuries: dynamicCenturies };
     setCatalogTotals(currentTotals);
 
-    // 2. Fetch the user's CURRENT coins to validate against targets
+    // 2. Fetch the user's CURRENT coins
     const { data: userCoinsData, error: coinsError } = await supabase
       .from("user_coins")
       .select(`
@@ -58,22 +79,23 @@ export default function AchievementsPage() {
       return;
     }
 
-    // Flatten relation into your local Coin[] type structure
-    const userCoins: Coin[] = (userCoinsData || []).map((uc: any) => ({
-      year: uc.coins.year,
-      rarity: uc.coins.rarity,
-      metal: uc.coins.metal,
+    const loadedCoins: Coin[] = (userCoinsData || []).map((uc: any) => ({
+      year: uc.coins?.year || 0,
+      rarity: uc.coins?.rarity || 0,
+      metal: uc.coins?.metal || "",
       condition: uc.condition,
     }));
 
-    // 3. Evaluate dynamically which achievements match right now
+    setUserCoins(loadedCoins);
+
+    // 3. Evaluate completed achievements
     const validCompletedNames = achievements
-      .filter((achievement) => achievement.check(userCoins, currentTotals))
+      .filter((achievement) => achievement.check(loadedCoins, currentTotals))
       .map((achievement) => achievement.name);
 
     setCompletedNames(validCompletedNames);
 
-    // 4. Sync the database state so stale entries vanish and scores update
+    // 4. Sync database states
     const { data: dbAchievements } = await supabase
       .from("user_achievements")
       .select("achievement_name")
@@ -83,19 +105,16 @@ export default function AchievementsPage() {
     const lostAchievements = dbNames.filter(name => !validCompletedNames.includes(name));
 
     if (lostAchievements.length > 0) {
-      // Calculate total points to deduct based on your local achievements settings
       const pointsToDeduct = achievements
         .filter(a => lostAchievements.includes(a.name))
         .reduce((sum, a) => sum + a.points, 0);
 
-      // Remove the unearned achievement rows from the user's profile
       await supabase
         .from("user_achievements")
         .delete()
         .eq("user_id", user.id)
         .in("achievement_name", lostAchievements);
 
-      // Fetch the user's profile to adjust their running total score
       const { data: profile } = await supabase
         .from("profiles")
         .select("score")
@@ -103,9 +122,7 @@ export default function AchievementsPage() {
         .single();
 
       if (profile) {
-        // Enforce a minimum floor of 0 so scores never drop below zero
         const newScore = Math.max(0, (profile.score || 0) - pointsToDeduct);
-
         await supabase
           .from("profiles")
           .update({ score: newScore })
@@ -139,17 +156,23 @@ export default function AchievementsPage() {
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {completedList.map((achievement) => (
-          <div
-            key={achievement.id}
-            className="border p-4 rounded shadow bg-green-100 border-green-500 text-green-800"
-          >
-            <h3 className="text-2xl font-bold">{achievement.name}</h3>
-            <p className="mt-2">Category: {achievement.category}</p>
-            <p className="mt-2 font-bold">Reward: {achievement.points} points</p>
-            <p className="mt-4 font-bold">✅ Completed</p>
-          </div>
-        ))}
+        {completedList.map((achievement) => {
+          const progress = achievement.getProgress(userCoins, catalogTotals);
+          return (
+            <div
+              key={achievement.id}
+              className="border p-4 rounded shadow bg-green-100 border-green-500 text-green-800"
+            >
+              <h3 className="text-2xl font-bold">{achievement.name}</h3>
+              <p className="mt-2">Category: {achievement.category}</p>
+              <p className="mt-2 font-bold">Reward: {achievement.points} points</p>
+              <p className="mt-2 text-sm bg-green-200 inline-block px-2 py-1 rounded font-mono">
+                Progress: {progress.current} / {progress.target}
+              </p>
+              <p className="mt-4 font-bold">✅ Completed</p>
+            </div>
+          );
+        })}
       </div>
 
       <div className="my-10 border-t border-gray-300"></div>
@@ -159,17 +182,23 @@ export default function AchievementsPage() {
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {notCompletedList.map((achievement) => (
-          <div
-            key={achievement.id}
-            className="border p-4 rounded shadow bg-white"
-          >
-            <h3 className="text-2xl font-bold">{achievement.name}</h3>
-            <p className="mt-2">Category: {achievement.category}</p>
-            <p className="mt-2 font-bold">Reward: {achievement.points} points</p>
-            <p className="mt-4 font-bold text-gray-500">Not Completed</p>
-          </div>
-        ))}
+        {notCompletedList.map((achievement) => {
+          const progress = achievement.getProgress(userCoins, catalogTotals);
+          return (
+            <div
+              key={achievement.id}
+              className="border p-4 rounded shadow bg-white"
+            >
+              <h3 className="text-2xl font-bold">{achievement.name}</h3>
+              <p className="mt-2">Category: {achievement.category}</p>
+              <p className="mt-2 font-bold">Reward: {achievement.points} points</p>
+              <p className="mt-2 text-sm bg-gray-100 inline-block px-2 py-1 rounded font-mono text-gray-700 border">
+                Progress: {progress.current} / {progress.target}
+              </p>
+              <p className="mt-4 font-bold text-gray-500">Not Completed</p>
+            </div>
+          );
+        })}
       </div>
     </main>
   );
