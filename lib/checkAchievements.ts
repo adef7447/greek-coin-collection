@@ -6,14 +6,23 @@ type Coin = {
   year: number;
   rarity: number;
   metal: string;
-  userCondition?: number;
+  condition: number;
 };
 
 export async function checkAchievements(userId: string) {
-  // 1. Load user's owned coins (SAFE VERSION)
+  // Load user's coins
   const { data: userCoins, error } = await supabase
     .from("user_coins")
-    .select("condition, coin_id, coins(*)")
+    .select(`
+      condition,
+      coin_id,
+      coins (
+        id,
+        year,
+        rarity,
+        metal
+      )
+    `)
     .eq("user_id", userId);
 
   if (error) {
@@ -21,70 +30,82 @@ export async function checkAchievements(userId: string) {
     return;
   }
 
-  const ownedCoins: Coin[] =
-    (userCoins || [])
-      .map((row: any) => {
-        if (!row.coins) return null;
+  const ownedCoins: Coin[] = [];
 
-        return {
-          id: row.coins.id,
-          year: row.coins.year,
-          rarity: row.coins.rarity,
-          metal: row.coins.metal,
-          userCondition: Number(row.condition),
-        };
-      })
-      .filter(Boolean);
+  for (const row of userCoins || []) {
+    const coin = row.coins as any;
 
-  // 2. Load unlocked achievements
+    if (!coin) continue;
+
+    ownedCoins.push({
+      id: coin.id,
+      year: coin.year,
+      rarity: coin.rarity,
+      metal: coin.metal,
+      condition: Number(row.condition),
+    });
+  }
+
+  // Load unlocked achievements
   const { data: unlocked } = await supabase
     .from("user_achievements")
     .select("achievement_name")
     .eq("user_id", userId);
 
   const unlockedNames = new Set(
-    (unlocked || []).map((a: any) => a.achievement_name)
+    (unlocked || []).map(
+      (a: any) => a.achievement_name
+    )
   );
 
-  // 3. Loop achievements
+  // Check every achievement
   for (const achievement of achievements) {
-    let completed = false;
+    const completed = achievement.check(ownedCoins);
 
-    try {
-      completed = achievement.check(ownedCoins);
-    } catch (err) {
-      console.log("Achievement check failed:", achievement.name, err);
-      continue;
-    }
+    const alreadyUnlocked =
+      unlockedNames.has(achievement.name);
 
-    const alreadyUnlocked = unlockedNames.has(achievement.name);
-
-    // UNLOCK
+    // Unlock achievement
     if (completed && !alreadyUnlocked) {
-      await supabase.from("user_achievements").insert({
-        user_id: userId,
-        achievement_name: achievement.name,
-        points: achievement.points,
-      });
+      const { error: insertError } =
+        await supabase
+          .from("user_achievements")
+          .insert({
+            user_id: userId,
+            achievement_name:
+              achievement.name,
+            points: achievement.points,
+          });
 
-      await supabase.rpc("increment_score", {
-        user_id_input: userId,
-        amount: achievement.points,
-      });
+      if (!insertError) {
+        await supabase.rpc(
+          "increment_score",
+          {
+            user_id_input: userId,
+            amount: achievement.points,
+          }
+        );
+      }
     }
 
-    // REMOVE
+    // Remove achievement
     if (!completed && alreadyUnlocked) {
       await supabase
         .from("user_achievements")
         .delete()
         .eq("user_id", userId)
-        .eq("achievement_name", achievement.name);
+        .eq(
+          "achievement_name",
+          achievement.name
+        );
 
-      await supabase.rpc("decrement_score", {
-        user_id_input: userId,
-        amount: achievement.points,
-      });
+      await supabase.rpc(
+        "decrement_score",
+        {
+          user_id_input: userId,
+          amount: achievement.points,
+        }
+      );
     }
   }
 }
