@@ -15,7 +15,7 @@ export type CatalogTotals = {
   eras: Record<string, number>;
   eraPointsPool: Record<string, number>;
   
-  // NEW: Easier variant maps tracking sets containing only Standard through Epic (Rarity < 50)
+  // Easier variant maps tracking sets containing only Standard through Epic (Rarity < 50)
   yearsEasier: Record<number, number>;
   yearEasierPointsPool: Record<number, number>;
   decadesEasier: Record<string, number>;
@@ -25,7 +25,7 @@ export type CatalogTotals = {
 };
 
 export type Achievement = {
-  id: number;
+  id: number | string; // Adjusted to allow string IDs for your customized tiers safely
   category: string;
   name: string;
   points: number;
@@ -96,30 +96,325 @@ const trackedYears = [
 ];
 
 export const achievements: Achievement[] = [
+  // ==========================================
+  // SILVER COIN MILESTONES
+  // ==========================================
   {
-    id: 1,
-    category: "Collection",
-    name: "First Coin",
-    points: 5,
-    check: (coins) => coins.length >= 1,
-    getProgress: (coins) => ({ current: Math.min(coins.length, 1), target: 1 })
+    id: "silver_1",
+    name: "struck silver",
+    category: "Silver",
+    points: 10,
+    check: (coins) => coins.filter(c => c.metal?.toLowerCase() === "silver").length >= 1,
+    getProgress: (coins) => ({ current: coins.filter(c => c.metal?.toLowerCase() === "silver").length, target: 1 })
   },
   {
-    id: 2,
-    category: "Collection",
-    name: "Coin Hoarder",
-    points: 50,
-    check: (coins) => coins.length >= 50,
-    getProgress: (coins) => ({ current: Math.min(coins.length, 50), target: 50 })
+    id: "silver_5",
+    name: "silver enjoyer",
+    category: "Silver",
+    points: 20,
+    check: (coins) => coins.filter(c => c.metal?.toLowerCase() === "silver").length >= 5,
+    getProgress: (coins) => ({ current: coins.filter(c => c.metal?.toLowerCase() === "silver").length, target: 5 })
   },
   {
-    id: 3,
-    category: "Collection",
-    name: "Museum",
+    id: "silver_20",
+    name: "silver stacker",
+    category: "Silver",
+    points: 200,
+    check: (coins) => coins.filter(c => c.metal?.toLowerCase() === "silver").length >= 20,
+    getProgress: (coins) => ({ current: coins.filter(c => c.metal?.toLowerCase() === "silver").length, target: 20 })
+  },
+  {
+    id: "silver_65",
+    name: "silver dragon",
+    category: "Silver",
+    points: 2000,
+    check: (coins) => coins.filter(c => c.metal?.toLowerCase() === "silver").length >= 65,
+    getProgress: (coins) => ({ current: coins.filter(c => c.metal?.toLowerCase() === "silver").length, target: 65 })
+  },
+
+  // ==========================================
+  // GOLD COIN MILESTONES
+  // ==========================================
+  {
+    id: "gold_1",
+    name: "struck gold",
+    category: "Gold",
+    points: 200,
+    check: (coins) => coins.filter(c => c.metal?.toLowerCase() === "gold").length >= 1,
+    getProgress: (coins) => ({ current: coins.filter(c => c.metal?.toLowerCase() === "gold").length, target: 1 })
+  },
+  {
+    id: "gold_5",
+    name: "gold stacker",
+    category: "Gold",
     points: 500,
-    check: (coins) => coins.length >= 200,
-    getProgress: (coins) => ({ current: Math.min(coins.length, 200), target: 200 })
+    check: (coins) => coins.filter(c => c.metal?.toLowerCase() === "gold").length >= 5,
+    getProgress: (coins) => ({ current: coins.filter(c => c.metal?.toLowerCase() === "gold").length, target: 5 })
   },
+  {
+    id: "gold_10",
+    name: "scrooge mcduck",
+    category: "Gold",
+    points: 2000,
+    check: (coins) => coins.filter(c => c.metal?.toLowerCase() === "gold").length >= 10,
+    getProgress: (coins) => ({ current: coins.filter(c => c.metal?.toLowerCase() === "gold").length, target: 10 })
+  },
+  {
+    id: "gold_22",
+    name: "golden dragon",
+    category: "Gold",
+    points: 10000,
+    check: (coins) => coins.filter(c => c.metal?.toLowerCase() === "gold").length >= 22,
+    getProgress: (coins) => ({ current: coins.filter(c => c.metal?.toLowerCase() === "gold").length, target: 22 })
+  },
+
+  // ==========================================
+  // VOLUME COUNT MILESTONES
+  // ==========================================
+  {
+    id: "count_1",
+    name: "first coin",
+    category: "Count",
+    points: 1,
+    check: (coins) => coins.length >= 1,
+    getProgress: (coins) => ({ current: coins.length, target: 1 })
+  },
+  {
+    id: "count_10",
+    name: "grandma's change",
+    category: "Count",
+    points: 5,
+    check: (coins) => coins.length >= 10,
+    getProgress: (coins) => ({ current: coins.length, target: 10 })
+  },
+  {
+    id: "count_50",
+    name: "novice collector",
+    category: "Count",
+    points: 15,
+    check: (coins) => coins.length >= 50,
+    getProgress: (coins) => ({ current: coins.length, target: 50 })
+  },
+  {
+    id: "count_100",
+    name: "aspiring collector",
+    category: "Count",
+    points: 25,
+    check: (coins) => coins.length >= 100,
+    getProgress: (coins) => ({ current: coins.length, target: 100 })
+  },
+  {
+    id: "count_200",
+    name: "intermediate collector",
+    category: "Count",
+    points: 40,
+    check: (coins) => coins.length >= 200,
+    getProgress: (coins) => ({ current: coins.length, target: 200 })
+  },
+  {
+    id: "count_300",
+    name: "master collector",
+    category: "Count",
+    points: 80,
+    check: (coins) => coins.length >= 300,
+    getProgress: (coins) => ({ current: coins.length, target: 300 })
+  },
+  {
+    id: "count_350",
+    name: "grand master collector",
+    category: "Count",
+    points: 200,
+    check: (coins) => coins.length >= 350,
+    getProgress: (coins) => ({ current: coins.length, target: 350 })
+  },
+  {
+    id: "count_415",
+    name: "true dragon",
+    category: "Count",
+    points: 2000,
+    check: (coins) => coins.length >= 415,
+    getProgress: (coins) => ({ current: coins.length, target: 415 })
+  },
+
+  // ==========================================
+  // CONDITION TIER MILESTONES (Indices 1 to 13)
+  // ==========================================
+  {
+    id: "cond_p",
+    name: "barely a coin",
+    category: "Condition",
+    points: 1,
+    check: (coins) => coins.some(c => c.condition === 1),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 1) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "cond_fr",
+    name: "i can spot the date",
+    category: "Condition",
+    points: 2,
+    check: (coins) => coins.some(c => c.condition === 2),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 2) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "cond_ag",
+    name: "almost half ok",
+    category: "Condition",
+    points: 3,
+    check: (coins) => coins.some(c => c.condition === 3),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 3) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "cond_g",
+    name: "almost ok",
+    category: "Condition",
+    points: 4,
+    check: (coins) => coins.some(c => c.condition === 4),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 4) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "cond_vg",
+    name: "that's ok",
+    category: "Condition",
+    points: 5,
+    check: (coins) => coins.some(c => c.condition === 5),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 5) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "cond_f",
+    name: "fine",
+    category: "Condition",
+    points: 6,
+    check: (coins) => coins.some(c => c.condition === 6),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 6) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "cond_vf",
+    name: "ooh very nice",
+    category: "Condition",
+    points: 7,
+    check: (coins) => coins.some(c => c.condition === 7),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 7) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "cond_xf",
+    name: "nice details",
+    category: "Condition",
+    points: 8,
+    check: (coins) => coins.some(c => c.condition === 8),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 8) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "cond_au",
+    name: "almost unc",
+    category: "Condition",
+    points: 9,
+    check: (coins) => coins.some(c => c.condition === 9),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 9) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "cond_lu",
+    name: "no wear nowhere",
+    category: "Condition",
+    points: 10,
+    check: (coins) => coins.some(c => c.condition === 10),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 10) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "cond_mu",
+    name: "right out of the box",
+    category: "Condition",
+    points: 12,
+    check: (coins) => coins.some(c => c.condition === 11),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 11) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "cond_bu",
+    name: "in the box",
+    category: "Condition",
+    points: 15,
+    check: (coins) => coins.some(c => c.condition === 12),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 12) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "cond_hu",
+    name: "Perfection(if you keep this up good luck to your wallet)",
+    category: "Condition",
+    points: 50,
+    check: (coins) => coins.some(c => c.condition === 13),
+    getProgress: (coins) => ({ current: coins.some(c => c.condition === 13) ? 1 : 0, target: 1 })
+  },
+
+  // ==========================================
+  // RARITY MILESTONES (Based on your ranges)
+  // ==========================================
+  {
+    id: "rare_standard",
+    name: "a coin",
+    category: "Rarity",
+    points: 1,
+    check: (coins) => coins.some(c => c.rarity < 10),
+    getProgress: (coins) => ({ current: coins.some(c => c.rarity < 10) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "rare_common",
+    name: "not exactly what you would call rare",
+    category: "Rarity",
+    points: 2,
+    check: (coins) => coins.some(c => c.rarity >= 10 && c.rarity < 20),
+    getProgress: (coins) => ({ current: coins.some(c => c.rarity >= 10 && c.rarity < 20) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "rare_uncommon",
+    name: "first real coin",
+    category: "Rarity",
+    points: 3,
+    check: (coins) => coins.some(c => c.rarity >= 20 && c.rarity < 30),
+    getProgress: (coins) => ({ current: coins.some(c => c.rarity >= 20 && c.rarity < 30) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "rare_rare",
+    name: "now that's rare",
+    category: "Rarity",
+    points: 5,
+    check: (coins) => coins.some(c => c.rarity >= 30 && c.rarity < 40),
+    getProgress: (coins) => ({ current: coins.some(c => c.rarity >= 30 && c.rarity < 40) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "rare_epic",
+    name: "an epic coin for an epic collector",
+    category: "Rarity",
+    points: 10,
+    check: (coins) => coins.some(c => c.rarity >= 40 && c.rarity < 50),
+    getProgress: (coins) => ({ current: coins.some(c => c.rarity >= 40 && c.rarity < 50) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "rare_legendary",
+    name: "the legend is now yours",
+    category: "Rarity",
+    points: 50,
+    check: (coins) => coins.some(c => c.rarity >= 50 && c.rarity < 60),
+    getProgress: (coins) => ({ current: coins.some(c => c.rarity >= 50 && c.rarity < 60) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "rare_mythic",
+    name: "now if you sell your collection your name will be in the bottom",
+    category: "Rarity",
+    points: 500,
+    check: (coins) => coins.some(c => c.rarity >= 60 && c.rarity < 70),
+    getProgress: (coins) => ({ current: coins.some(c => c.rarity >= 60 && c.rarity < 70) ? 1 : 0, target: 1 })
+  },
+  {
+    id: "rare_unique",
+    name: "are you a museum?",
+    category: "Rarity",
+    points: 10000,
+    check: (coins) => coins.some(c => c.rarity >= 70),
+    getProgress: (coins) => ({ current: coins.some(c => c.rarity >= 70) ? 1 : 0, target: 1 })
+  },
+
+  // ========================================================
+  // CORE HISTORICAL CATALOG TARGETS
+  // ========================================================
   {
     id: 4,
     category: "Years",
@@ -146,68 +441,6 @@ export const achievements: Achievement[] = [
     points: 25,
     check: (coins) => coins.some((c) => c.metal === "Bronze"),
     getProgress: (coins) => ({ current: coins.some((c) => c.metal === "Bronze") ? 1 : 0, target: 1 })
-  },
-  {
-    id: 7,
-    category: "Materials",
-    name: "Silver Enthusiast",
-    points: 100,
-    check: (coins) => coins.filter((c) => c.metal === "Silver").length >= 10,
-    getProgress: (coins) => {
-      const count = coins.filter((c) => c.metal === "Silver").length;
-      return { current: Math.min(count, 10), target: 10 };
-    }
-  },
-  {
-    id: 8,
-    category: "Materials",
-    name: "Silver Hoarder",
-    points: 500,
-    check: (coins) => coins.filter((c) => c.metal === "Silver").length >= 50,
-    getProgress: (coins) => {
-      const count = coins.filter((c) => c.metal === "Silver").length;
-      return { current: Math.min(count, 50), target: 50 };
-    }
-  },
-  {
-    id: 9,
-    category: "Rarity",
-    name: "Rare Find",
-    points: 25,
-    check: (coins) => coins.some((c) => c.rarity >= 30),
-    getProgress: (coins) => ({ current: coins.some((c) => c.rarity >= 30) ? 1 : 0, target: 1 })
-  },
-  {
-    id: 10,
-    category: "Rarity",
-    name: "Legendary Hunter",
-    points: 500,
-    check: (coins) => coins.some((c) => c.rarity >= 50),
-    getProgress: (coins) => ({ current: coins.some((c) => c.rarity >= 50) ? 1 : 0, target: 1 })
-  },
-  {
-    id: 11,
-    category: "Rarity",
-    name: "One Of A Kind",
-    points: 5000,
-    check: (coins) => coins.some((c) => c.rarity >= 70),
-    getProgress: (coins) => ({ current: coins.some((c) => c.rarity >= 70) ? 1 : 0, target: 1 })
-  },
-  {
-    id: 12,
-    category: "Condition",
-    name: "Brilliant",
-    points: 100,
-    check: (coins) => coins.some((c) => c.condition >= 12),
-    getProgress: (coins) => ({ current: coins.some((c) => c.condition >= 12) ? 1 : 0, target: 1 })
-  },
-  {
-    id: 13,
-    category: "Condition",
-    name: "Perfection",
-    points: 1000,
-    check: (coins) => coins.some((c) => c.condition >= 13),
-    getProgress: (coins) => ({ current: coins.some((c) => c.condition >= 13) ? 1 : 0, target: 1 })
   },
 
   // ========================================================
@@ -243,7 +476,6 @@ export const achievements: Achievement[] = [
     check: (coins: Coin[], catalogTotals: CatalogTotals) => {
       const fullCount = catalogTotals.eras[era.name] ?? 0;
       const easierCount = catalogTotals.erasEasier[era.name] ?? 0;
-      // If totals match exactly, it implies zero legendary+ coins exist in this range
       if (fullCount === easierCount || easierCount === 0) return false;
 
       const userCount = new Set(coins.filter((c) => Number(c.year) >= era.start && Number(c.year) <= era.end && c.rarity < 50).map((c) => c.id)).size;
