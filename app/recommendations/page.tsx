@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { supabase } from "../lib/supabase";
-import { checkAchievements } from "../lib/checkAchievements";
+import { supabase } from "@/lib/supabase";
+import { checkAchievements } from "@/lib/checkAchievements";
 
 interface CatalogCoin {
   id: number;
