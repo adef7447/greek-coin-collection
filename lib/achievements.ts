@@ -10,9 +10,18 @@ export type CatalogTotals = {
   years: Record<number, number>;      
   centuries: Record<string, number>;  
   yearPointsPool: Record<number, number>; 
-  // NEW: Track counts and points specifically calculated for decade sets
   decades: Record<string, number>;
   decadePointsPool: Record<string, number>;
+  eras: Record<string, number>;
+  eraPointsPool: Record<string, number>;
+  
+  // NEW: Easier variant maps tracking sets containing only Standard through Epic (Rarity < 50)
+  yearsEasier: Record<number, number>;
+  yearEasierPointsPool: Record<number, number>;
+  decadesEasier: Record<string, number>;
+  decadeEasierPointsPool: Record<string, number>;
+  erasEasier: Record<string, number>;
+  eraEasierPointsPool: Record<string, number>;
 };
 
 export type Achievement = {
@@ -25,7 +34,7 @@ export type Achievement = {
   getProgress: (coins: Coin[], catalogTotals: CatalogTotals) => { current: number; target: number };
 };
 
-// Your updated rarity point engine
+// Your rarity point engine
 export function getScoreFromRarity(rarity: number): number {
   if (rarity >= 70) return 100000; // Unique
   if (rarity >= 60) return 5000;   // Mythic
@@ -59,6 +68,31 @@ const decadeDefinitions: { name: string; start: number; end: number }[] = [
   { name: "the other 40s", start: 1840, end: 1849 },
   { name: "the other 30s", start: 1830, end: 1839 },
   { name: "the other 20s", start: 1820, end: 1829 },
+];
+
+// Era Definitions mapping custom historical boundaries 
+const eraDefinitions = [
+  { name: "3rd Democracy Collector", start: 1976, end: 2000 },
+  { name: "Constantinos II", start: 1966, end: 1973 },
+  { name: "Paul", start: 1954, end: 1965 },
+  { name: "2nd Democracy", start: 1926, end: 1930 },
+  { name: "George I", start: 1868, end: 1922 },
+  { name: "Otto", start: 1832, end: 1857 },
+  { name: "Kapodistrias", start: 1828, end: 1831 },
+  { name: "19th Century Scope", start: 1828, end: 1895 },
+  { name: "20th Century Scope", start: 1910, end: 2000 },
+];
+
+const trackedYears = [
+  1830, 1831, 1832, 1833, 1834, 1836, 1837, 1838, 1839, 1840,
+  1841, 1842, 1843, 1844, 1845, 1846, 1847, 1848, 1849, 1850,
+  1851, 1852, 1855, 1857, 1868, 1869, 1870, 1873, 1874, 1875,
+  1876, 1878, 1879, 1882, 1883, 1884, 1893, 1894, 1895, 1910, 
+  1911, 1912, 1921, 1922, 1926, 1930, 1940, 1954, 1957, 1959, 
+  1960, 1962, 1963, 1964, 1965, 1966, 1967, 1968, 1969, 1970,
+  1971, 1973, 1976, 1978, 1979, 1980, 1981, 1982, 1984, 1985,
+  1986, 1988, 1990, 1991, 1992, 1993, 1994, 1996, 1997, 1998,
+  1999, 2000
 ];
 
 export const achievements: Achievement[] = [
@@ -103,22 +137,6 @@ export const achievements: Achievement[] = [
       const totalRequired = catalogTotals.years[targetYear] ?? 0;
       const userUniqueCount = new Set(coins.filter((c) => Number(c.year) === targetYear).map((c) => c.id)).size;
       return { current: userUniqueCount, target: totalRequired };
-    }
-  },
-  {
-    id: 5,
-    category: "Years",
-    name: "19th Century",
-    points: 100,
-    check: (coins, catalogTotals) => {
-      const totalRequired = catalogTotals.centuries["19th"] ?? 0;
-      const userUnique19thCount = new Set(coins.filter((c) => Number(c.year) >= 1800 && Number(c.year) <= 1899).map((c) => c.id)).size;
-      return userUnique19thCount >= totalRequired && totalRequired > 0;
-    },
-    getProgress: (coins, catalogTotals) => {
-      const totalRequired = catalogTotals.centuries["19th"] ?? 0;
-      const userUnique19thCount = new Set(coins.filter((c) => Number(c.year) >= 1800 && Number(c.year) <= 1899).map((c) => c.id)).size;
-      return { current: userUnique19thCount, target: totalRequired };
     }
   },
   {
@@ -193,7 +211,56 @@ export const achievements: Achievement[] = [
   },
 
   // ========================================================
-  // DYNAMIC CALCULATED DECADE ACHIEVEMENTS
+  // DYNAMIC CALCULATED MASTER ERAS
+  // ========================================================
+  ...eraDefinitions.map((era, index) => ({
+    id: 900 + index,
+    category: "Eras",
+    name: era.name,
+    points: 0,
+    getDynamicPoints: (catalogTotals: CatalogTotals) => catalogTotals.eraPointsPool[era.name] ?? 0,
+    check: (coins: Coin[], catalogTotals: CatalogTotals) => {
+      const totalRequired = catalogTotals.eras[era.name] ?? 0;
+      const userUniqueCount = new Set(coins.filter((c) => Number(c.year) >= era.start && Number(c.year) <= era.end).map((c) => c.id)).size;
+      return userUniqueCount >= totalRequired && totalRequired > 0;
+    },
+    getProgress: (coins: Coin[], catalogTotals: CatalogTotals) => {
+      const totalRequired = catalogTotals.eras[era.name] ?? 0;
+      const userUniqueCount = new Set(coins.filter((c) => Number(c.year) >= era.start && Number(c.year) <= era.end).map((c) => c.id)).size;
+      return { current: userUniqueCount, target: totalRequired };
+    }
+  })),
+
+  // ========================================================
+  // DYNAMIC CALCULATED "EASIER" ERAS
+  // ========================================================
+  ...eraDefinitions.map((era, index) => ({
+    id: 1900 + index,
+    category: "Eras (Easier)",
+    name: `easier ${era.name}`,
+    points: 0,
+    getDynamicPoints: (catalogTotals: CatalogTotals) => catalogTotals.eraEasierPointsPool[era.name] ?? 0,
+    check: (coins: Coin[], catalogTotals: CatalogTotals) => {
+      const fullCount = catalogTotals.eras[era.name] ?? 0;
+      const easierCount = catalogTotals.erasEasier[era.name] ?? 0;
+      // If totals match exactly, it implies zero legendary+ coins exist in this range
+      if (fullCount === easierCount || easierCount === 0) return false;
+
+      const userCount = new Set(coins.filter((c) => Number(c.year) >= era.start && Number(c.year) <= era.end && c.rarity < 50).map((c) => c.id)).size;
+      return userCount >= easierCount;
+    },
+    getProgress: (coins: Coin[], catalogTotals: CatalogTotals) => {
+      const fullCount = catalogTotals.eras[era.name] ?? 0;
+      const easierCount = catalogTotals.erasEasier[era.name] ?? 0;
+      if (fullCount === easierCount || easierCount === 0) return { current: 0, target: 0 };
+
+      const userCount = new Set(coins.filter((c) => Number(c.year) >= era.start && Number(c.year) <= era.end && c.rarity < 50).map((c) => c.id)).size;
+      return { current: userCount, target: easierCount };
+    }
+  })),
+
+  // ========================================================
+  // DYNAMIC CALCULATED MASTER DECADES
   // ========================================================
   ...decadeDefinitions.map((dec, index) => ({
     id: 500 + index,
@@ -203,34 +270,47 @@ export const achievements: Achievement[] = [
     getDynamicPoints: (catalogTotals: CatalogTotals) => catalogTotals.decadePointsPool[dec.name] ?? 0,
     check: (coins: Coin[], catalogTotals: CatalogTotals) => {
       const totalRequired = catalogTotals.decades[dec.name] ?? 0;
-      const userUniqueCount = new Set(
-        coins.filter((c) => Number(c.year) >= dec.start && Number(c.year) <= dec.end).map((c) => c.id)
-      ).size;
+      const userUniqueCount = new Set(coins.filter((c) => Number(c.year) >= dec.start && Number(c.year) <= dec.end).map((c) => c.id)).size;
       return userUniqueCount >= totalRequired && totalRequired > 0;
     },
     getProgress: (coins: Coin[], catalogTotals: CatalogTotals) => {
       const totalRequired = catalogTotals.decades[dec.name] ?? 0;
-      const userUniqueCount = new Set(
-        coins.filter((c) => Number(c.year) >= dec.start && Number(c.year) <= dec.end).map((c) => c.id)
-      ).size;
+      const userUniqueCount = new Set(coins.filter((c) => Number(c.year) >= dec.start && Number(c.year) <= dec.end).map((c) => c.id)).size;
       return { current: userUniqueCount, target: totalRequired };
     }
   })),
 
   // ========================================================
-  // DYNAMIC CALCULATED YEAR ACHIEVEMENTS
+  // DYNAMIC CALCULATED "EASIER" DECADES
   // ========================================================
-  ...[
-    1830, 1831, 1832, 1833, 1834, 1836, 1837, 1838, 1839, 1840,
-    1841, 1842, 1843, 1844, 1845, 1846, 1847, 1848, 1849, 1850,
-    1851, 1852, 1855, 1857, 1868, 1869, 1870, 1873, 1874, 1875,
-    1876, 1878, 1879, 1882, 1883, 1884, 1893, 1894, 1895, 1910, 
-    1911, 1912, 1921, 1922, 1926, 1930, 1940, 1954, 1957, 1959, 
-    1960, 1962, 1963, 1964, 1965, 1966, 1967, 1968, 1969, 1970,
-    1971, 1973, 1976, 1978, 1979, 1980, 1981, 1982, 1984, 1985,
-    1986, 1988, 1990, 1991, 1992, 1993, 1994, 1996, 1997, 1998,
-    1999, 2000
-  ].map((year, index) => ({
+  ...decadeDefinitions.map((dec, index) => ({
+    id: 1500 + index,
+    category: "Decades (Easier)",
+    name: `easier ${dec.name}`,
+    points: 0,
+    getDynamicPoints: (catalogTotals: CatalogTotals) => catalogTotals.decadeEasierPointsPool[dec.name] ?? 0,
+    check: (coins: Coin[], catalogTotals: CatalogTotals) => {
+      const fullCount = catalogTotals.decades[dec.name] ?? 0;
+      const easierCount = catalogTotals.decadesEasier[dec.name] ?? 0;
+      if (fullCount === easierCount || easierCount === 0) return false;
+
+      const userCount = new Set(coins.filter((c) => Number(c.year) >= dec.start && Number(c.year) <= dec.end && c.rarity < 50).map((c) => c.id)).size;
+      return userCount >= easierCount;
+    },
+    getProgress: (coins: Coin[], catalogTotals: CatalogTotals) => {
+      const fullCount = catalogTotals.decades[dec.name] ?? 0;
+      const easierCount = catalogTotals.decadesEasier[dec.name] ?? 0;
+      if (fullCount === easierCount || easierCount === 0) return { current: 0, target: 0 };
+
+      const userCount = new Set(coins.filter((c) => Number(c.year) >= dec.start && Number(c.year) <= dec.end && c.rarity < 50).map((c) => c.id)).size;
+      return { current: userCount, target: easierCount };
+    }
+  })),
+
+  // ========================================================
+  // DYNAMIC CALCULATED MASTER YEARS
+  // ========================================================
+  ...trackedYears.map((year, index) => ({
     id: 100 + index, 
     category: "Years",
     name: `${year} Collector`,
@@ -245,6 +325,33 @@ export const achievements: Achievement[] = [
       const totalRequired = catalogTotals.years[year] ?? 0;
       const userUniqueCount = new Set(coins.filter((c) => Number(c.year) === year).map((c) => c.id)).size;
       return { current: userUniqueCount, target: totalRequired };
+    }
+  })),
+
+  // ========================================================
+  // DYNAMIC CALCULATED "EASIER" YEARS
+  // ========================================================
+  ...trackedYears.map((year, index) => ({
+    id: 2100 + index, 
+    category: "Years (Easier)",
+    name: `easier ${year} Collector`,
+    points: 0, 
+    getDynamicPoints: (catalogTotals: CatalogTotals) => catalogTotals.yearEasierPointsPool[year] ?? 0,
+    check: (coins: Coin[], catalogTotals: CatalogTotals) => {
+      const fullCount = catalogTotals.years[year] ?? 0;
+      const easierCount = catalogTotals.yearsEasier[year] ?? 0;
+      if (fullCount === easierCount || easierCount === 0) return false;
+
+      const userCount = new Set(coins.filter((c) => Number(c.year) === year && c.rarity < 50).map((c) => c.id)).size;
+      return userCount >= easierCount;
+    },
+    getProgress: (coins: Coin[], catalogTotals: CatalogTotals) => {
+      const fullCount = catalogTotals.years[year] ?? 0;
+      const easierCount = catalogTotals.yearsEasier[year] ?? 0;
+      if (fullCount === easierCount || easierCount === 0) return { current: 0, target: 0 };
+
+      const userCount = new Set(coins.filter((c) => Number(c.year) === year && c.rarity < 50).map((c) => c.id)).size;
+      return { current: userCount, target: easierCount };
     }
   }))
 ];

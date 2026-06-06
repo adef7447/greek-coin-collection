@@ -9,30 +9,46 @@ type Coin = {
   condition: number;
 };
 
-export async function checkAchievements(userId: string) {
-  // 1. Fetch ALL master coins from Supabase
+// HELPER: Move master calculation out of the main loop so it can eventually be cached
+async function getCatalogTotals(): Promise<CatalogTotals | null> {
   const { data: masterCoins, error: masterError } = await supabase
     .from("coins")
     .select("id, year, rarity");
 
   if (masterError) {
-    console.error("Error fetching master coins in calculation script:", masterError);
-    return;
+    console.error("Error fetching master coins:", masterError);
+    return null;
   }
 
-  // 2. Initialize dynamic tracking records
   const dynamicYears: Record<number, number> = {};
   const dynamicCenturies: Record<string, number> = {};
   const dynamicDecades: Record<string, number> = {};
+  const dynamicEras: Record<string, number> = {};
+
+  // NEW: Easier variant tracks
+  const dynamicYearsEasier: Record<number, number> = {};
+  const dynamicDecadesEasier: Record<string, number> = {};
+  const dynamicErasEasier: Record<string, number> = {};
 
   const yearRawPointsTracker: Record<number, number> = {};
   const decadeRawPointsTracker: Record<string, number> = {};
+  const eraRawPointsTracker: Record<string, number> = {};
+
+  // NEW: Easier point trackers
+  const yearEasierRawPointsTracker: Record<number, number> = {};
+  const decadeEasierRawPointsTracker: Record<string, number> = {};
+  const eraEasierRawPointsTracker: Record<string, number> = {};
 
   const uniqueYearVariants: Record<number, Set<number>> = {};
   const uniqueCenturyVariants: Record<string, Set<number>> = {};
   const uniqueDecadeVariants: Record<string, Set<number>> = {};
+  const uniqueEraVariants: Record<string, Set<number>> = {};
 
-  // Decade boundary definitions mirroring your achievements configuration
+  // NEW: Easier unique maps
+  const uniqueYearEasierVariants: Record<number, Set<number>> = {};
+  const uniqueDecadeEasierVariants: Record<string, Set<number>> = {};
+  const uniqueEraEasierVariants: Record<string, Set<number>> = {};
+
   const decadeDefinitions = [
     { name: "90s", start: 1990, end: 2000 },
     { name: "80s", start: 1980, end: 1989 },
@@ -53,149 +69,225 @@ export async function checkAchievements(userId: string) {
     { name: "the other 20s", start: 1820, end: 1829 },
   ];
 
+  const eraDefinitions = [
+    { name: "3rd Democracy Collector", start: 1976, end: 2000 },
+    { name: "Constantinos II", start: 1966, end: 1973 },
+    { name: "Paul", start: 1954, end: 1965 },
+    { name: "2nd Democracy", start: 1926, end: 1930 },
+    { name: "George I", start: 1868, end: 1922 },
+    { name: "Otto", start: 1832, end: 1857 },
+    { name: "Kapodistrias", start: 1828, end: 1831 },
+    { name: "19th Century Scope", start: 1828, end: 1895 },
+    { name: "20th Century Scope", start: 1910, end: 2000 },
+  ];
+
   masterCoins?.forEach((coin) => {
     const y = Number(coin.year);
     if (isNaN(y)) return;
 
     const coinScore = getScoreFromRarity(coin.rarity);
+    const isEasier = coin.rarity < 50;
 
-    // Track unique variants and points per year
+    // Process Master Years
     if (!uniqueYearVariants[y]) uniqueYearVariants[y] = new Set();
     uniqueYearVariants[y].add(coin.id);
     yearRawPointsTracker[y] = (yearRawPointsTracker[y] || 0) + coinScore;
 
-    // Track unique variants for the 19th century (1800-1899)
+    // Process Easier Years
+    if (isEasier) {
+      if (!uniqueYearEasierVariants[y]) uniqueYearEasierVariants[y] = new Set();
+      uniqueYearEasierVariants[y].add(coin.id);
+      yearEasierRawPointsTracker[y] = (yearEasierRawPointsTracker[y] || 0) + coinScore;
+    }
+
+    // Process Centuries
     if (y >= 1800 && y <= 1899) {
       if (!uniqueCenturyVariants["19th"]) uniqueCenturyVariants["19th"] = new Set();
       uniqueCenturyVariants["19th"].add(coin.id);
     }
 
-    // Track unique variants and points per decade range
+    // Process Decades
     decadeDefinitions.forEach((dec) => {
       if (y >= dec.start && y <= dec.end) {
         if (!uniqueDecadeVariants[dec.name]) uniqueDecadeVariants[dec.name] = new Set();
         uniqueDecadeVariants[dec.name].add(coin.id);
         decadeRawPointsTracker[dec.name] = (decadeRawPointsTracker[dec.name] || 0) + coinScore;
+
+        if (isEasier) {
+          if (!uniqueDecadeEasierVariants[dec.name]) uniqueDecadeEasierVariants[dec.name] = new Set();
+          uniqueDecadeEasierVariants[dec.name].add(coin.id);
+          decadeEasierRawPointsTracker[dec.name] = (decadeEasierRawPointsTracker[dec.name] || 0) + coinScore;
+        }
+      }
+    });
+
+    // Process Eras
+    eraDefinitions.forEach((era) => {
+      if (y >= era.start && y <= era.end) {
+        if (!uniqueEraVariants[era.name]) uniqueEraVariants[era.name] = new Set();
+        uniqueEraVariants[era.name].add(coin.id);
+        eraRawPointsTracker[era.name] = (eraRawPointsTracker[era.name] || 0) + coinScore;
+
+        if (isEasier) {
+          if (!uniqueEraEasierVariants[era.name]) uniqueEraEasierVariants[era.name] = new Set();
+          uniqueEraEasierVariants[era.name].add(coin.id);
+          eraEasierRawPointsTracker[era.name] = (eraEasierRawPointsTracker[era.name] || 0) + coinScore;
+        }
       }
     });
   });
 
-  // Finalize Year Points Pool (Half values, rounded down)
+  // Finalize Year Points Pool
   const dynamicYearPoints: Record<number, number> = {};
+  const dynamicYearEasierPoints: Record<number, number> = {};
   Object.keys(uniqueYearVariants).forEach((y) => {
     const yearNum = Number(y);
     dynamicYears[yearNum] = uniqueYearVariants[yearNum].size;
-    const totalCombinedPoints = yearRawPointsTracker[yearNum] || 0;
-    dynamicYearPoints[yearNum] = Math.floor(totalCombinedPoints / 2);
+    dynamicYearPoints[yearNum] = Math.floor((yearRawPointsTracker[yearNum] || 0) / 2);
+
+    dynamicYearsEasier[yearNum] = uniqueYearEasierVariants[yearNum]?.size || 0;
+    dynamicYearEasierPoints[yearNum] = Math.floor((yearEasierRawPointsTracker[yearNum] || 0) / 2);
   });
 
-  // Finalize Decade Points Pool (25% calculation rounded UP to the nearest 100)
+  // Finalize Decade Points Pool
   const dynamicDecadePoints: Record<string, number> = {};
+  const dynamicDecadeEasierPoints: Record<string, number> = {};
   Object.keys(uniqueDecadeVariants).forEach((name) => {
     dynamicDecades[name] = uniqueDecadeVariants[name].size;
-    const totalCombinedPoints = decadeRawPointsTracker[name] || 0;
-    dynamicDecadePoints[name] = Math.ceil((totalCombinedPoints * 0.25) / 100) * 100;
+    dynamicDecadePoints[name] = Math.ceil(((decadeRawPointsTracker[name] || 0) * 0.25) / 100) * 100;
+
+    dynamicDecadesEasier[name] = uniqueDecadeEasierVariants[name]?.size || 0;
+    dynamicDecadeEasierPoints[name] = Math.ceil(((decadeEasierRawPointsTracker[name] || 0) * 0.25) / 100) * 100;
+  });
+
+  // Finalize Era Points Pool
+  const dynamicEraPoints: Record<string, number> = {};
+  const dynamicEraEasierPoints: Record<string, number> = {};
+  Object.keys(uniqueEraVariants).forEach((name) => {
+    dynamicEras[name] = uniqueEraVariants[name].size;
+    dynamicEraPoints[name] = Math.ceil(((eraRawPointsTracker[name] || 0) * 0.10) / 100) * 100;
+
+    dynamicErasEasier[name] = uniqueEraEasierVariants[name]?.size || 0;
+    dynamicEraEasierPoints[name] = Math.ceil(((eraEasierRawPointsTracker[name] || 0) * 0.10) / 100) * 100;
   });
 
   if (uniqueCenturyVariants["19th"]) {
     dynamicCenturies["19th"] = uniqueCenturyVariants["19th"].size;
   }
 
-  // Combine into the structural shape matching your CatalogTotals interface
-  const catalogTotals: CatalogTotals = { 
+  return { 
     years: dynamicYears, 
     centuries: dynamicCenturies, 
     yearPointsPool: dynamicYearPoints,
     decades: dynamicDecades,
-    decadePointsPool: dynamicDecadePoints
+    decadePointsPool: dynamicDecadePoints,
+    eras: dynamicEras,
+    eraPointsPool: dynamicEraPoints,
+    // Add missing tracking objects to satisfy CatalogTotals type rules
+    yearsEasier: dynamicYearsEasier,
+    yearEasierPointsPool: dynamicYearEasierPoints,
+    decadesEasier: dynamicDecadesEasier,
+    decadeEasierPointsPool: dynamicDecadeEasierPoints,
+    erasEasier: dynamicErasEasier,
+    eraEasierPointsPool: dynamicEraEasierPoints
   };
+}
 
-  // 3. Load user's owned coins
-  const { data: userCoins, error } = await supabase
-    .from("user_coins")
-    .select(`
-      condition,
-      coin_id,
-      coins (
-        id,
-        year,
-        rarity,
-        metal
-      )
-    `)
-    .eq("user_id", userId);
+export async function checkAchievements(userId: string) {
+  const catalogTotals = await getCatalogTotals();
+  if (!catalogTotals) return;
 
-  if (error) {
-    console.log("Error loading coins:", error);
+  const [coinsResponse, achievementsResponse] = await Promise.all([
+    supabase
+      .from("user_coins")
+      .select(`condition, coins (id, year, rarity, metal)`)
+      .eq("user_id", userId),
+    supabase
+      .from("user_achievements")
+      .select("achievement_name, points")
+      .eq("user_id", userId)
+  ]);
+
+  if (coinsResponse.error || achievementsResponse.error) {
+    console.error("Error fetching user data setup:", coinsResponse.error || achievementsResponse.error);
     return;
   }
 
-  const ownedCoins: Coin[] = [];
+  const ownedCoins: Coin[] = (coinsResponse.data || [])
+    .map((row: any) => {
+      const coin = row.coins;
+      if (!coin) return null;
+      return {
+        id: coin.id,
+        year: coin.year,
+        rarity: coin.rarity,
+        metal: coin.metal,
+        condition: Number(row.condition),
+      };
+    })
+    .filter((c): c is Coin => c !== null);
 
-  for (const row of userCoins || []) {
-    const coin = row.coins as any;
-
-    if (!coin) continue;
-
-    ownedCoins.push({
-      id: coin.id,
-      year: coin.year,
-      rarity: coin.rarity,
-      metal: coin.metal,
-      condition: Number(row.condition),
-    });
-  }
-
-  // 4. Load unlocked achievements
-  const { data: unlocked } = await supabase
-    .from("user_achievements")
-    .select("achievement_name")
-    .eq("user_id", userId);
-
-  const unlockedNames = new Set(
-    (unlocked || []).map((a: any) => a.achievement_name)
+  const unlockedMap = new Map<string, number>(
+    (achievementsResponse.data || []).map((a: any) => [a.achievement_name, a.points])
   );
 
-  // 5. Check every achievement
+  const achievementsToInsert: Array<{ user_id: string; achievement_name: string; points: number }> = [];
+  const achievementsToDelete: string[] = [];
+  let scoreDelta = 0;
+
   for (const achievement of achievements) {
     const completed = achievement.check(ownedCoins, catalogTotals);
-    const alreadyUnlocked = unlockedNames.has(achievement.name);
-
-    // Determine exact points contextually (dynamic year calculation vs dynamic decade vs static)
-    const finalPoints = achievement.getDynamicPoints 
+    const dynamicPointsSnapshot = achievement.getDynamicPoints 
       ? achievement.getDynamicPoints(catalogTotals) 
       : achievement.points;
 
-    // Unlock achievement
+    const previouslyAwardedPoints = unlockedMap.get(achievement.name);
+    const alreadyUnlocked = previouslyAwardedPoints !== undefined;
+
     if (completed && !alreadyUnlocked) {
-      const { error: insertError } = await supabase
-        .from("user_achievements")
-        .insert({
-          user_id: userId,
-          achievement_name: achievement.name,
-          points: finalPoints,
-        });
-
-      if (!insertError) {
-        await supabase.rpc("increment_score", {
-          user_id_input: userId,
-          amount: finalPoints,
-        });
-      }
+      achievementsToInsert.push({
+        user_id: userId,
+        achievement_name: achievement.name,
+        points: dynamicPointsSnapshot,
+      });
+      scoreDelta += dynamicPointsSnapshot;
+    } 
+    else if (!completed && alreadyUnlocked) {
+      achievementsToDelete.push(achievement.name);
+      scoreDelta -= previouslyAwardedPoints;
     }
+  }
 
-    // Remove achievement
-    if (!completed && alreadyUnlocked) {
-      await supabase
+  const dbOperations: Promise<any>[] = [];
+
+  if (achievementsToInsert.length > 0) {
+    dbOperations.push(supabase.from("user_achievements").insert(achievementsToInsert));
+  }
+
+  if (achievementsToDelete.length > 0) {
+    dbOperations.push(
+      supabase
         .from("user_achievements")
         .delete()
         .eq("user_id", userId)
-        .eq("achievement_name", achievement.name);
+        .in("achievement_name", achievementsToDelete)
+    );
+  }
 
-      await supabase.rpc("decrement_score", {
+  if (scoreDelta !== 0) {
+    const rpcName = scoreDelta > 0 ? "increment_score" : "decrement_score";
+    dbOperations.push(
+      supabase.rpc(rpcName, {
         user_id_input: userId,
-        amount: finalPoints,
-      });
-    }
+        amount: Math.abs(scoreDelta),
+      })
+    );
+  }
+
+  if (dbOperations.length > 0) {
+    const results = await Promise.all(dbOperations);
+    results.forEach((res) => {
+      if (res?.error) console.error("Error running batch achievement updates:", res.error);
+    });
   }
 }
