@@ -9,8 +9,10 @@ export type Coin = {
 export type CatalogTotals = {
   years: Record<number, number>;      
   centuries: Record<string, number>;  
-  // NEW: Store calculated points pool per year to use in the page UI tracking
   yearPointsPool: Record<number, number>; 
+  // NEW: Track counts and points specifically calculated for decade sets
+  decades: Record<string, number>;
+  decadePointsPool: Record<string, number>;
 };
 
 export type Achievement = {
@@ -18,7 +20,6 @@ export type Achievement = {
   category: string;
   name: string;
   points: number;
-  // Overloaded or dynamic points calculator if needed
   getDynamicPoints?: (catalogTotals: CatalogTotals) => number;
   check: (coins: Coin[], catalogTotals: CatalogTotals) => boolean;
   getProgress: (coins: Coin[], catalogTotals: CatalogTotals) => { current: number; target: number };
@@ -35,6 +36,30 @@ export function getScoreFromRarity(rarity: number): number {
   if (rarity >= 10) return 3;      // Common
   return 1;                        // Standard
 }
+
+// Map decade names to their structural year evaluation definitions
+const decadeDefinitions: { name: string; start: number; end: number }[] = [
+  // 1900s Decades (90s handles 1990-2000 explicitly)
+  { name: "90s", start: 1990, end: 2000 },
+  { name: "80s", start: 1980, end: 1989 },
+  { name: "70s", start: 1970, end: 1979 },
+  { name: "60s", start: 1960, end: 1969 },
+  { name: "50s", start: 1950, end: 1959 },
+  { name: "40s", start: 1940, end: 1949 },
+  { name: "30s", start: 1930, end: 1939 },
+  { name: "20s", start: 1920, end: 1929 },
+  { name: "10s", start: 1910, end: 1919 },
+  
+  // 1800s Decades ("the other" prefixes)
+  { name: "the other 90s", start: 1890, end: 1899 },
+  { name: "the other 80s", start: 1880, end: 1889 },
+  { name: "the other 70s", start: 1870, end: 1879 },
+  { name: "the other 60s", start: 1860, end: 1869 },
+  { name: "the other 50s", start: 1850, end: 1859 },
+  { name: "the other 40s", start: 1840, end: 1849 },
+  { name: "the other 30s", start: 1830, end: 1839 },
+  { name: "the other 20s", start: 1820, end: 1829 },
+];
 
 export const achievements: Achievement[] = [
   {
@@ -65,7 +90,7 @@ export const achievements: Achievement[] = [
     id: 4,
     category: "Years",
     name: "1828 Collector",
-    points: 0, // Calculated dynamically below
+    points: 0,
     getDynamicPoints: (catalogTotals) => catalogTotals.yearPointsPool[1828] ?? 0,
     check: (coins, catalogTotals) => {
       const targetYear = 1828;
@@ -168,18 +193,48 @@ export const achievements: Achievement[] = [
   },
 
   // ========================================================
+  // DYNAMIC CALCULATED DECADE ACHIEVEMENTS
+  // ========================================================
+  ...decadeDefinitions.map((dec, index) => ({
+    id: 500 + index,
+    category: "Decades",
+    name: dec.name,
+    points: 0,
+    getDynamicPoints: (catalogTotals: CatalogTotals) => catalogTotals.decadePointsPool[dec.name] ?? 0,
+    check: (coins: Coin[], catalogTotals: CatalogTotals) => {
+      const totalRequired = catalogTotals.decades[dec.name] ?? 0;
+      const userUniqueCount = new Set(
+        coins.filter((c) => Number(c.year) >= dec.start && Number(c.year) <= dec.end).map((c) => c.id)
+      ).size;
+      return userUniqueCount >= totalRequired && totalRequired > 0;
+    },
+    getProgress: (coins: Coin[], catalogTotals: CatalogTotals) => {
+      const totalRequired = catalogTotals.decades[dec.name] ?? 0;
+      const userUniqueCount = new Set(
+        coins.filter((c) => Number(c.year) >= dec.start && Number(c.year) <= dec.end).map((c) => c.id)
+      ).size;
+      return { current: userUniqueCount, target: totalRequired };
+    }
+  })),
+
+  // ========================================================
   // DYNAMIC CALCULATED YEAR ACHIEVEMENTS
   // ========================================================
   ...[
     1830, 1831, 1832, 1833, 1834, 1836, 1837, 1838, 1839, 1840,
     1841, 1842, 1843, 1844, 1845, 1846, 1847, 1848, 1849, 1850,
     1851, 1852, 1855, 1857, 1868, 1869, 1870, 1873, 1874, 1875,
-    1876, 1878, 1879, 1882, 1883, 1884, 1893, 1894, 1895
+    1876, 1878, 1879, 1882, 1883, 1884, 1893, 1894, 1895, 1910, 
+    1911, 1912, 1921, 1922, 1926, 1930, 1940, 1954, 1957, 1959, 
+    1960, 1962, 1963, 1964, 1965, 1966, 1967, 1968, 1969, 1970,
+    1971, 1973, 1976, 1978, 1979, 1980, 1981, 1982, 1984, 1985,
+    1986, 1988, 1990, 1991, 1992, 1993, 1994, 1996, 1997, 1998,
+    1999, 2000
   ].map((year, index) => ({
     id: 100 + index, 
     category: "Years",
     name: `${year} Collector`,
-    points: 0, // Fallback, read via getDynamicPoints safely
+    points: 0, 
     getDynamicPoints: (catalogTotals: CatalogTotals) => catalogTotals.yearPointsPool[year] ?? 0,
     check: (coins: Coin[], catalogTotals: CatalogTotals) => {
       const totalRequired = catalogTotals.years[year] ?? 0;
