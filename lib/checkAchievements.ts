@@ -25,7 +25,7 @@ async function getCatalogTotals(): Promise<CatalogTotals | null> {
   const dynamicDecades: Record<string, number> = {};
   const dynamicEras: Record<string, number> = {};
 
-  // NEW: Easier variant tracks
+  // Easier variant tracks
   const dynamicYearsEasier: Record<number, number> = {};
   const dynamicDecadesEasier: Record<string, number> = {};
   const dynamicErasEasier: Record<string, number> = {};
@@ -34,7 +34,7 @@ async function getCatalogTotals(): Promise<CatalogTotals | null> {
   const decadeRawPointsTracker: Record<string, number> = {};
   const eraRawPointsTracker: Record<string, number> = {};
 
-  // NEW: Easier point trackers
+  // Easier point trackers
   const yearEasierRawPointsTracker: Record<number, number> = {};
   const decadeEasierRawPointsTracker: Record<string, number> = {};
   const eraEasierRawPointsTracker: Record<string, number> = {};
@@ -44,7 +44,7 @@ async function getCatalogTotals(): Promise<CatalogTotals | null> {
   const uniqueDecadeVariants: Record<string, Set<number>> = {};
   const uniqueEraVariants: Record<string, Set<number>> = {};
 
-  // NEW: Easier unique maps
+  // Easier unique maps
   const uniqueYearEasierVariants: Record<number, Set<number>> = {};
   const uniqueDecadeEasierVariants: Record<string, Set<number>> = {};
   const uniqueEraEasierVariants: Record<string, Set<number>> = {};
@@ -183,7 +183,6 @@ async function getCatalogTotals(): Promise<CatalogTotals | null> {
     decadePointsPool: dynamicDecadePoints,
     eras: dynamicEras,
     eraPointsPool: dynamicEraPoints,
-    // Add missing tracking objects to satisfy CatalogTotals type rules
     yearsEasier: dynamicYearsEasier,
     yearEasierPointsPool: dynamicYearEasierPoints,
     decadesEasier: dynamicDecadesEasier,
@@ -261,26 +260,32 @@ export async function checkAchievements(userId: string) {
   const dbOperations: Promise<any>[] = [];
 
   if (achievementsToInsert.length > 0) {
-    dbOperations.push(supabase.from("user_achievements").insert(achievementsToInsert));
+    dbOperations.push(
+      Promise.resolve(supabase.from("user_achievements").insert(achievementsToInsert))
+    );
   }
 
   if (achievementsToDelete.length > 0) {
     dbOperations.push(
-      supabase
-        .from("user_achievements")
-        .delete()
-        .eq("user_id", userId)
-        .in("achievement_name", achievementsToDelete)
+      Promise.resolve(
+        supabase
+          .from("user_achievements")
+          .delete()
+          .eq("user_id", userId)
+          .in("achievement_name", achievementsToDelete)
+      )
     );
   }
 
   if (scoreDelta !== 0) {
     const rpcName = scoreDelta > 0 ? "increment_score" : "decrement_score";
     dbOperations.push(
-      supabase.rpc(rpcName, {
-        user_id_input: userId,
-        amount: Math.abs(scoreDelta),
-      })
+      Promise.resolve(
+        supabase.rpc(rpcName, {
+          user_id_input: userId,
+          amount: Math.abs(scoreDelta),
+        })
+      )
     );
   }
 
