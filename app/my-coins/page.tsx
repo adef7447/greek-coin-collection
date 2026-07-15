@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
+
 export default function MyCoinsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -14,6 +15,9 @@ export default function MyCoinsPage() {
     [userCoinId: number]: { image1: string; image2: string; notes: string };
   }>({});
 
+  // Refs to store timeouts for debounced auto-saving on each specific input field
+  const timeoutRefs = useRef<{ [key: string]: NodeJS.Timeout }>({});
+
   async function fetchMyCollection() {
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -22,7 +26,6 @@ export default function MyCoinsPage() {
       return;
     }
 
-    // Joins the user_coins table to the primary coins table
     const { data, error } = await supabase
       .from("user_coins")
       .select(`
@@ -62,7 +65,31 @@ export default function MyCoinsPage() {
     setLoading(false);
   }
 
-  // Updates local input state dynamically as user types
+  // Auto-save logic that gets called when typing stops
+  const triggerAutoSave = (userCoinId: number, field: string, value: string) => {
+    const key = `${userCoinId}-${field}`;
+    
+    // Clear any pending save for this specific field
+    if (timeoutRefs.current[key]) {
+      clearTimeout(timeoutRefs.current[key]);
+    }
+
+    // Set a new timeout to save 1 second after the user stops typing
+    timeoutRefs.current[key] = setTimeout(async () => {
+      const { error } = await supabase
+        .from("user_coins")
+        .update({ [field]: value.trim() })
+        .eq("id", userCoinId);
+
+      if (error) {
+        console.error(`Auto-save failed for ${field}:`, error.message);
+      } else {
+        console.log(`Auto-saved ${field} successfully!`);
+      }
+    }, 1000); 
+  };
+
+  // Updates local input state and schedules the auto-save
   const handleInputChange = (userCoinId: number, field: "image1" | "image2" | "notes", value: string) => {
     setEditStates((prev) => ({
       ...prev,
@@ -71,28 +98,16 @@ export default function MyCoinsPage() {
         [field]: value,
       },
     }));
+
+    triggerAutoSave(userCoinId, field, value);
   };
 
-  // Push updates to Supabase
-  async function saveDetails(userCoinId: number) {
-    const { image1, image2, notes } = editStates[userCoinId];
-
-    const { error } = await supabase
-      .from("user_coins")
-      .update({
-        image1: image1.trim(),
-        image2: image2.trim(),
-        notes: notes.trim(),
-      })
-      .eq("id", userCoinId);
-
-    if (error) {
-      alert("Failed to save changes: " + error.message);
-    } else {
-      alert("Coin details updated successfully!");
-      fetchMyCollection(); // Refresh data
-    }
-  }
+  // Clean up any pending save timeouts when the component unmounts
+  useEffect(() => {
+    return () => {
+      Object.values(timeoutRefs.current).forEach(clearTimeout);
+    };
+  }, []);
 
   useEffect(() => {
     fetchMyCollection();
@@ -181,9 +196,9 @@ export default function MyCoinsPage() {
                     </div>
                   </div>
 
-                  {/* --- Micro Input Form Block --- */}
+                  {/* --- Seamless Auto-saving Micro Inputs --- */}
                   <div className="mt-6 pt-4 border-t border-gray-100">
-                    <div className="flex flex-wrap gap-2 items-center justify-between mb-4">
+                    <div className="flex flex-wrap gap-2 items-center justify-between">
                       
                       {/* Custom Image 1 */}
                       <div className="flex flex-col">
@@ -193,7 +208,7 @@ export default function MyCoinsPage() {
                           placeholder="Link 1"
                           value={editStates[uc.id]?.image1 || ""}
                           onChange={(e) => handleInputChange(uc.id, "image1", e.target.value)}
-                          className="border text-xs p-1 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
+                          className="border text-xs p-1.5 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </div>
 
@@ -205,7 +220,7 @@ export default function MyCoinsPage() {
                           placeholder="Link 2"
                           value={editStates[uc.id]?.image2 || ""}
                           onChange={(e) => handleInputChange(uc.id, "image2", e.target.value)}
-                          className="border text-xs p-1 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
+                          className="border text-xs p-1.5 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </div>
 
@@ -214,21 +229,14 @@ export default function MyCoinsPage() {
                         <span className="text-[10px] text-gray-500 font-bold mb-0.5">Notes</span>
                         <input
                           type="text"
-                          placeholder="Your notes..."
+                          placeholder="Write..."
                           value={editStates[uc.id]?.notes || ""}
                           onChange={(e) => handleInputChange(uc.id, "notes", e.target.value)}
-                          className="border text-xs p-1 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
+                          className="border text-xs p-1.5 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
                         />
                       </div>
 
                     </div>
-
-                    <button
-                      onClick={() => saveDetails(uc.id)}
-                      className="w-full bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-1.5 rounded transition"
-                    >
-                      Save Details
-                    </button>
                   </div>
 
                 </div>
