@@ -101,11 +101,16 @@ export default function MyCoinsPage() {
     if (error) {
       console.error("Error fetching user coins:", error);
     } else if (data) {
+      // Clean and unpack relational objects immediately so components downstream remain clean
+      const normalizedData = data.map((item: any) => ({
+        ...item,
+        coin: Array.isArray(item.coins) ? item.coins[0] : item.coins,
+      }));
+
       // Client-side sorting guarantees exact matching order
-      const sortedData = [...data].sort((a, b) => {
-        // Safely extract the coin object even if Supabase returned it wrapped in a one-element array
-        const coinA = Array.isArray(a.coins) ? a.coins[0] : a.coins;
-        const coinB = Array.isArray(b.coins) ? b.coins[0] : b.coins;
+      normalizedData.sort((a, b) => {
+        const coinA = a.coin;
+        const coinB = b.coin;
 
         if (!coinA || !coinB) return 0;
 
@@ -123,12 +128,12 @@ export default function MyCoinsPage() {
         return coinA.id - coinB.id;
       });
 
-      setUserCoins(sortedData);
+      setUserCoins(normalizedData);
       
       // Initialize editing states from DB values
       const initialStates: typeof editStates = {};
       const initialStatus: typeof saveStatus = {};
-      sortedData.forEach((item) => {
+      normalizedData.forEach((item) => {
         initialStates[item.id] = {
           image1: item.image1 || "",
           image2: item.image2 || "",
@@ -165,8 +170,15 @@ export default function MyCoinsPage() {
         setSaveStatus(prev => ({ ...prev, [userCoinId]: "Idle" }));
       } else {
         setSaveStatus(prev => ({ ...prev, [userCoinId]: "Saved!" }));
-        // Reset "Saved!" text to idle after 2 seconds
-        setTimeout(() => {
+        
+        // Clear status timeout reference if any exists to prevent buggy overlap overwrites
+        const clearStatusKey = `status-clear-${userCoinId}`;
+        if (timeoutRefs.current[clearStatusKey]) {
+          clearTimeout(timeoutRefs.current[clearStatusKey]);
+        }
+
+        // Reset "Saved!" text to idle after 2 seconds safely
+        timeoutRefs.current[clearStatusKey] = setTimeout(() => {
           setSaveStatus(prev => ({ ...prev, [userCoinId]: "Idle" }));
         }, 2000);
       }
@@ -191,6 +203,15 @@ export default function MyCoinsPage() {
     const confirmDelete = confirm("Are you sure you want to remove this coin from your collection?");
     if (!confirmDelete) return;
 
+    // Instantly cancel any pending network save tasks on this card to prevent post-delete errors
+    ["image1", "image2", "notes", "status-clear"].forEach((fieldOrStatus) => {
+      const key = fieldOrStatus === "status-clear" ? `status-clear-${userCoinId}` : `${userCoinId}-${fieldOrStatus}`;
+      if (timeoutRefs.current[key]) {
+        clearTimeout(timeoutRefs.current[key]);
+        delete timeoutRefs.current[key];
+      }
+    });
+
     const { error } = await supabase
       .from("user_coins")
       .delete()
@@ -205,7 +226,7 @@ export default function MyCoinsPage() {
     }
   }
 
-  // Clean up any pending save timeouts when the component unmounts
+  // Clean up all pending save timeouts when the component unmounts
   useEffect(() => {
     return () => {
       Object.values(timeoutRefs.current).forEach(clearTimeout);
@@ -241,8 +262,7 @@ export default function MyCoinsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {userCoins.map((uc) => {
-              // Safely extract the coin object even if Supabase returns it as a one-element array
-              const coin = Array.isArray(uc.coins) ? uc.coins[0] : uc.coins;
+              const coin = uc.coin;
               const hasCustomImage = editStates[uc.id]?.image1 || editStates[uc.id]?.image2;
 
               // Convert dynamic DB states to actual formatted letters and words
