@@ -29,6 +29,10 @@ export default function MyCoinsPage() {
       return;
     }
 
+    // Pulls data and sorts: 
+    // 1. Year (Newest -> Oldest)
+    // 2. Denomination (Smallest -> Largest)
+    // 3. Coin ID (Smallest -> Largest)
     const { data, error } = await supabase
       .from("user_coins")
       .select(`
@@ -39,6 +43,7 @@ export default function MyCoinsPage() {
         image2,
         notes,
         coins (
+          id,
           name,
           year,
           denomination,
@@ -47,7 +52,10 @@ export default function MyCoinsPage() {
           reverse_url
         )
       `)
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .order("year", { referencedTable: "coins", ascending: false })
+      .order("denomination", { referencedTable: "coins", ascending: true })
+      .order("id", { referencedTable: "coins", ascending: true });
 
     if (error) {
       console.error("Error fetching user coins:", error);
