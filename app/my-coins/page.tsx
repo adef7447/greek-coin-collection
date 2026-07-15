@@ -5,50 +5,6 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
-// Maps database condition IDs (1-13) to their standard professional grading symbols
-const gradeMap: { [key: number]: string } = {
-  1: "P",
-  2: "FR",
-  3: "AG",
-  4: "G",
-  5: "VG",
-  6: "F",
-  7: "VF",
-  8: "XF",
-  9: "AU",
-  10: "UNC",
-  11: "MU",
-  12: "BU",
-  13: "HU",
-};
-
-// Helper function to format the active damage states into clean, readable words
-function formatDamage(uc: any): string {
-  const activeDamages: string[] = [];
-
-  // 1. General Damage
-  if (uc.damaged === 1) activeDamages.push("Damaged");
-  if (uc.damaged === 2) activeDamages.push("Heavily Damaged");
-
-  // 2. Bent
-  if (uc.bent === 1) activeDamages.push("Bent");
-  if (uc.bent === 2) activeDamages.push("Heavily Bent");
-
-  // 3. Cleaned
-  if (uc.cleaned === 1) activeDamages.push("Cleaned");
-  if (uc.cleaned === 2) activeDamages.push("Harshly Cleaned");
-
-  // 4. Environmental Damage
-  if (uc.environmental === 1) activeDamages.push("Environmental Damage");
-  if (uc.environmental === 2) activeDamages.push("Heavy Environmental Damage");
-
-  // 5. Holed
-  if (uc.holed === 1) activeDamages.push("Holed");
-  if (uc.holed === 2) activeDamages.push("Heavily Holed");
-
-  return activeDamages.length > 0 ? activeDamages.join(", ") : "None";
-}
-
 export default function MyCoinsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -78,11 +34,7 @@ export default function MyCoinsPage() {
       .select(`
         id,
         condition,
-        damaged,
-        bent,
-        cleaned,
-        environmental,
-        holed,
+        damage,
         image1,
         image2,
         notes,
@@ -101,16 +53,16 @@ export default function MyCoinsPage() {
     if (error) {
       console.error("Error fetching user coins:", error);
     } else if (data) {
-      // Clean and unpack relational objects immediately so components downstream remain clean
+      // 1. Normalize relation payloads so 'coins' is consistently an object
       const normalizedData = data.map((item: any) => ({
         ...item,
-        coin: Array.isArray(item.coins) ? item.coins[0] : item.coins,
+        coins: Array.isArray(item.coins) ? item.coins[0] : item.coins,
       }));
 
-      // Client-side sorting guarantees exact matching order
+      // 2. Apply sorting: Year (desc), Denomination (asc), Coin ID (asc)
       normalizedData.sort((a, b) => {
-        const coinA = a.coin;
-        const coinB = b.coin;
+        const coinA = a.coins;
+        const coinB = b.coins;
 
         if (!coinA || !coinB) return 0;
 
@@ -170,15 +122,8 @@ export default function MyCoinsPage() {
         setSaveStatus(prev => ({ ...prev, [userCoinId]: "Idle" }));
       } else {
         setSaveStatus(prev => ({ ...prev, [userCoinId]: "Saved!" }));
-        
-        // Clear status timeout reference if any exists to prevent buggy overlap overwrites
-        const clearStatusKey = `status-clear-${userCoinId}`;
-        if (timeoutRefs.current[clearStatusKey]) {
-          clearTimeout(timeoutRefs.current[clearStatusKey]);
-        }
-
-        // Reset "Saved!" text to idle after 2 seconds safely
-        timeoutRefs.current[clearStatusKey] = setTimeout(() => {
+        // Reset "Saved!" text to idle after 2 seconds
+        setTimeout(() => {
           setSaveStatus(prev => ({ ...prev, [userCoinId]: "Idle" }));
         }, 2000);
       }
@@ -203,15 +148,6 @@ export default function MyCoinsPage() {
     const confirmDelete = confirm("Are you sure you want to remove this coin from your collection?");
     if (!confirmDelete) return;
 
-    // Instantly cancel any pending network save tasks on this card to prevent post-delete errors
-    ["image1", "image2", "notes", "status-clear"].forEach((fieldOrStatus) => {
-      const key = fieldOrStatus === "status-clear" ? `status-clear-${userCoinId}` : `${userCoinId}-${fieldOrStatus}`;
-      if (timeoutRefs.current[key]) {
-        clearTimeout(timeoutRefs.current[key]);
-        delete timeoutRefs.current[key];
-      }
-    });
-
     const { error } = await supabase
       .from("user_coins")
       .delete()
@@ -226,7 +162,7 @@ export default function MyCoinsPage() {
     }
   }
 
-  // Clean up all pending save timeouts when the component unmounts
+  // Clean up any pending save timeouts when the component unmounts
   useEffect(() => {
     return () => {
       Object.values(timeoutRefs.current).forEach(clearTimeout);
@@ -262,12 +198,8 @@ export default function MyCoinsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {userCoins.map((uc) => {
-              const coin = uc.coin;
+              const coin = uc.coins;
               const hasCustomImage = editStates[uc.id]?.image1 || editStates[uc.id]?.image2;
-
-              // Convert dynamic DB states to actual formatted letters and words
-              const readableCondition = gradeMap[uc.condition] || "Unknown";
-              const readableDamage = formatDamage(uc);
 
               if (!coin) return null;
 
@@ -332,8 +264,8 @@ export default function MyCoinsPage() {
                       <p><strong>Year:</strong> {coin.year}</p>
                       <p><strong>Denomination:</strong> {coin.denomination}</p>
                       <p><strong>Metal:</strong> {coin.metal}</p>
-                      <p><strong>Condition:</strong> {readableCondition}</p>
-                      <p><strong>Damage:</strong> {readableDamage}</p>
+                      <p><strong>Logged Condition Value:</strong> {uc.condition}</p>
+                      <p><strong>Logged Fault Signature:</strong> {uc.damage}</p>
                     </div>
                   </div>
 
