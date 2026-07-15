@@ -36,13 +36,13 @@ export default function InfoPage() {
             5. Then create your password that can be the same as in our site or different and then complete your sign up.
           </p>
           <p>
-            6. Then when you 
+            6. Then when you have created the email upload your images in the email's drive, click share, then click everyone with the link and copy the link.
           </p>
           <p>
-            7. 
+            7. Go to https://sheetany.com/google-drive-image-direct-link-generator paste your link and get the generated link.
           </p>
           <p>
-            8. 
+            8. You can upload that as your image.
           </p>
           <p>
             9. 
