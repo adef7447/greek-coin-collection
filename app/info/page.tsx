@@ -21,19 +21,19 @@ export default function InfoPage() {
         {/* Info Text Area */}
         <div className="bg-white p-6 rounded shadow space-y-4 text-gray-800 leading-relaxed">
           <p>
-            1. This database exists to help Greek coin collectors catalog, grade, and preserve their historical collections online.
+            1. This database exists to help Greek coin collectors catalog, grade, and preserve their collections online and also to compete with others and find the best deals for your collection.
           </p>
           <p>
-            2. The grading system uses standard numismatic classifications ranging from Poor (P) to Prooflike and Mint State variants.
+            2. Because we are a free site with no ads it is impossible for us to store large files so if you want to upload coin images you need to follow a few steps.
           </p>
           <p>
-            3. Each coin registered inside your personal inventory contributes directly to your profile score based on its rarity value.
+            3. Go to gmail.com and fill your name (doesn't have to be real) and the other info that doesn't have to be real either.
           </p>
           <p>
-            4. Make sure to accurately report physical damages like bends, holes, or harsh cleaning as it affects your collection logs.
+            4. Click create my own email address and use your dispay name like dispaynamecoinleveling@gmail.com if for some reason this isnt available use dispayname1coinleveling@gmail.com.
           </p>
           <p>
-            5. Unique tier coins require a rarity rating of 70 or higher and will instantly reward you with 100,000 points.
+            5. Then create your password that can be the same as in our site or different and then complete your sign up.
           </p>
           <p>
             6. You can easily view how your collection stacks up against other global collectors by visiting our live leaderboard page.
