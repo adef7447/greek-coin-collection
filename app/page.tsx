@@ -248,6 +248,12 @@ export default function Home() {
             >
               Recommendations ★
             </Link>
+            <Link
+  href="/info"
+  className="text-blue-600 underline"
+>
+  Info
+</Link>
           </div>
         </div>
       )}
