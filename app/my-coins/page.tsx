@@ -5,6 +5,56 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
+// Helper map for numeric conditions to friendly grade labels
+const CONDITION_MAP: { [key: number]: string } = {
+  1: "P (Poor)",
+  2: "FR (Fair)",
+  3: "AG (About Good)",
+  4: "G (Good)",
+  5: "VG (Very Good)",
+  6: "F (Fine)",
+  7: "VF (Very Fine)",
+  8: "XF (Extremely Fine)",
+  9: "AU (About Uncirculated)",
+  10: "LU (Lustrous Uncirculated)",
+  11: "MU (Mint Uncirculated)",
+  12: "BU (Brilliant Uncirculated)",
+  13: "HU (Highly Uncirculated)"
+};
+
+// Helper function to decode the 5-digit damage signature (e.g., 10201)
+function decodeDamageSignature(signature: number | string | null): string {
+  if (signature === null || signature === undefined) return "None";
+  
+  // Pad the signature with leading zeros to ensure it is always 5 digits
+  const sigStr = String(signature).padStart(5, "0");
+  
+  const damagedVal = Number(sigStr[0]);
+  const bentVal = Number(sigStr[1]);
+  const cleanedVal = Number(sigStr[2]);
+  const envVal = Number(sigStr[3]);
+  const holedVal = Number(sigStr[4]);
+
+  const activeDamages: string[] = [];
+
+  if (damagedVal === 1) activeDamages.push("Damaged");
+  if (damagedVal === 2) activeDamages.push("Heavy Damage");
+
+  if (bentVal === 1) activeDamages.push("Bent");
+  if (bentVal === 2) activeDamages.push("Heavily Bent");
+
+  if (cleanedVal === 1) activeDamages.push("Cleaned");
+  if (cleanedVal === 2) activeDamages.push("Harshly Cleaned");
+
+  if (envVal === 1) activeDamages.push("Environmental Damage");
+  if (envVal === 2) activeDamages.push("Heavy Environmental Damage");
+
+  if (holedVal === 1) activeDamages.push("Holed");
+  if (holedVal === 2) activeDamages.push("Heavily Holed");
+
+  return activeDamages.length > 0 ? activeDamages.join(", ") : "None";
+}
+
 export default function MyCoinsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -203,6 +253,10 @@ export default function MyCoinsPage() {
 
               if (!coin) return null;
 
+              // Decode Grade & Damage Signature
+              const conditionLabel = CONDITION_MAP[uc.condition] || `Unknown (${uc.condition})`;
+              const damageLabel = decodeDamageSignature(uc.damage);
+
               return (
                 <div key={uc.id} className="border p-4 rounded bg-white shadow flex flex-col justify-between">
                   <div>
@@ -264,8 +318,8 @@ export default function MyCoinsPage() {
                       <p><strong>Year:</strong> {coin.year}</p>
                       <p><strong>Denomination:</strong> {coin.denomination}</p>
                       <p><strong>Metal:</strong> {coin.metal}</p>
-                      <p><strong>Logged Condition Value:</strong> {uc.condition}</p>
-                      <p><strong>Logged Fault Signature:</strong> {uc.damage}</p>
+                      <p><strong>Grade:</strong> <span className="font-semibold text-blue-900">{conditionLabel}</span></p>
+                      <p><strong>Damage Details:</strong> <span className={damageLabel !== "None" ? "text-red-600 font-semibold" : "text-gray-500"}>{damageLabel}</span></p>
                     </div>
                   </div>
 
