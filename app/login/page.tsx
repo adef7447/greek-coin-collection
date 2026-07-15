@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../lib/supabase";
-import { checkAchievements } from "../lib/checkAchievements";
+import { supabase } from "../../lib/supabase";
+import { checkAchievements } from "../../lib/checkAchievements";
 
 export default function LoginPage() {
   const router = useRouter();
