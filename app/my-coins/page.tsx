@@ -9,6 +9,9 @@ export default function MyCoinsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [userCoins, setUserCoins] = useState<any[]>([]);
+  
+  // Track save status per card to show user when it actually saves
+  const [saveStatus, setSaveStatus] = useState<{ [userCoinId: number]: "Idle" | "Saving..." | "Saved!" }>({});
 
   // Local state to manage live editing changes for inputs on each card
   const [editStates, setEditStates] = useState<{
@@ -53,14 +56,17 @@ export default function MyCoinsPage() {
       
       // Initialize editing states from DB values
       const initialStates: typeof editStates = {};
+      const initialStatus: typeof saveStatus = {};
       data?.forEach((item) => {
         initialStates[item.id] = {
           image1: item.image1 || "",
           image2: item.image2 || "",
           notes: item.notes || "",
         };
+        initialStatus[item.id] = "Idle";
       });
       setEditStates(initialStates);
+      setSaveStatus(initialStatus);
     }
     setLoading(false);
   }
@@ -74,6 +80,8 @@ export default function MyCoinsPage() {
       clearTimeout(timeoutRefs.current[key]);
     }
 
+    setSaveStatus(prev => ({ ...prev, [userCoinId]: "Saving..." }));
+
     // Set a new timeout to save 1 second after the user stops typing
     timeoutRefs.current[key] = setTimeout(async () => {
       const { error } = await supabase
@@ -83,8 +91,13 @@ export default function MyCoinsPage() {
 
       if (error) {
         console.error(`Auto-save failed for ${field}:`, error.message);
+        setSaveStatus(prev => ({ ...prev, [userCoinId]: "Idle" }));
       } else {
-        console.log(`Auto-saved ${field} successfully!`);
+        setSaveStatus(prev => ({ ...prev, [userCoinId]: "Saved!" }));
+        // Reset "Saved!" text to idle after 2 seconds
+        setTimeout(() => {
+          setSaveStatus(prev => ({ ...prev, [userCoinId]: "Idle" }));
+        }, 2000);
       }
     }, 1000); 
   };
@@ -101,6 +114,25 @@ export default function MyCoinsPage() {
 
     triggerAutoSave(userCoinId, field, value);
   };
+
+  // Remove a coin from the collection
+  async function removeCoin(userCoinId: number) {
+    const confirmDelete = confirm("Are you sure you want to remove this coin from your collection?");
+    if (!confirmDelete) return;
+
+    const { error } = await supabase
+      .from("user_coins")
+      .delete()
+      .eq("id", userCoinId);
+
+    if (error) {
+      alert("Failed to remove coin: " + error.message);
+    } else {
+      alert("Coin successfully removed.");
+      // Instantly filter out deleted coin from the UI
+      setUserCoins(prev => prev.filter(item => item.id !== userCoinId));
+    }
+  }
 
   // Clean up any pending save timeouts when the component unmounts
   useEffect(() => {
@@ -144,7 +176,18 @@ export default function MyCoinsPage() {
               return (
                 <div key={uc.id} className="border p-4 rounded bg-white shadow flex flex-col justify-between">
                   <div>
-                    <h2 className="text-2xl font-bold mb-2">{coin.name}</h2>
+                    <div className="flex justify-between items-start">
+                      <h2 className="text-2xl font-bold mb-2">{coin.name}</h2>
+                      
+                      {/* Live Auto-save status feedback */}
+                      {saveStatus[uc.id] !== "Idle" && (
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
+                          saveStatus[uc.id] === "Saving..." ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800"
+                        }`}>
+                          {saveStatus[uc.id]}
+                        </span>
+                      )}
+                    </div>
                     
                     {/* --- Dynamic Image Render Box --- */}
                     <div className="space-y-2 mt-4 mb-4">
@@ -196,47 +239,57 @@ export default function MyCoinsPage() {
                     </div>
                   </div>
 
-                  {/* --- Seamless Auto-saving Micro Inputs --- */}
-                  <div className="mt-6 pt-4 border-t border-gray-100">
-                    <div className="flex flex-wrap gap-2 items-center justify-between">
-                      
-                      {/* Custom Image 1 */}
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-gray-500 font-bold mb-0.5">IMG 1 URL</span>
-                        <input
-                          type="text"
-                          placeholder="Link 1"
-                          value={editStates[uc.id]?.image1 || ""}
-                          onChange={(e) => handleInputChange(uc.id, "image1", e.target.value)}
-                          className="border text-xs p-1.5 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
+                  <div>
+                    {/* --- Seamless Auto-saving Micro Inputs --- */}
+                    <div className="mt-6 pt-4 border-t border-gray-100 mb-4">
+                      <div className="flex flex-wrap gap-2 items-center justify-between">
+                        
+                        {/* Custom Image 1 */}
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-gray-500 font-bold mb-0.5">IMG 1 URL</span>
+                          <input
+                            type="text"
+                            placeholder="Link 1"
+                            value={editStates[uc.id]?.image1 || ""}
+                            onChange={(e) => handleInputChange(uc.id, "image1", e.target.value)}
+                            className="border text-xs p-1.5 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
 
-                      {/* Custom Image 2 */}
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-gray-500 font-bold mb-0.5">IMG 2 URL</span>
-                        <input
-                          type="text"
-                          placeholder="Link 2"
-                          value={editStates[uc.id]?.image2 || ""}
-                          onChange={(e) => handleInputChange(uc.id, "image2", e.target.value)}
-                          className="border text-xs p-1.5 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
+                        {/* Custom Image 2 */}
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-gray-500 font-bold mb-0.5">IMG 2 URL</span>
+                          <input
+                            type="text"
+                            placeholder="Link 2"
+                            value={editStates[uc.id]?.image2 || ""}
+                            onChange={(e) => handleInputChange(uc.id, "image2", e.target.value)}
+                            className="border text-xs p-1.5 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
 
-                      {/* Notes Section */}
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-gray-500 font-bold mb-0.5">Notes</span>
-                        <input
-                          type="text"
-                          placeholder="Write..."
-                          value={editStates[uc.id]?.notes || ""}
-                          onChange={(e) => handleInputChange(uc.id, "notes", e.target.value)}
-                          className="border text-xs p-1.5 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
+                        {/* Notes Section */}
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-gray-500 font-bold mb-0.5">Notes</span>
+                          <input
+                            type="text"
+                            placeholder="Write..."
+                            value={editStates[uc.id]?.notes || ""}
+                            onChange={(e) => handleInputChange(uc.id, "notes", e.target.value)}
+                            className="border text-xs p-1.5 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
 
+                      </div>
                     </div>
+
+                    {/* --- Remove Button --- */}
+                    <button
+                      onClick={() => removeCoin(uc.id)}
+                      className="w-full bg-red-100 hover:bg-red-200 text-red-700 hover:text-red-800 text-xs font-bold py-2 rounded transition"
+                    >
+                      Remove from Binder
+                    </button>
                   </div>
 
                 </div>
