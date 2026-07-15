@@ -2,314 +2,241 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
-import { checkAchievements } from "../../lib/checkAchievements";
+export default function MyCoinsPage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+  const [userCoins, setUserCoins] = useState<any[]>([]);
 
-export default function MyCoins() {
-  function getScoreFromRarity(rarity: number) {
-  if (rarity >= 70) return 100000; // Unique
-  if (rarity >= 60) return 5000;   // Mythic
-  if (rarity >= 50) return 500;    // Legendary
-  if (rarity >= 40) return 100;    // Epic
-  if (rarity >= 30) return 30;     // Rare
-  if (rarity >= 20) return 10;     // Uncommon
-  if (rarity >= 10) return 3;      // Common
-  return 1;                        // Basic
-}
-  const [coins, setCoins] = useState<any[]>([]);
-  const [userDisplayName, setUserDisplayName] = useState("");
-  async function removeCoin(coinId: number, rarity: number) {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Local state to manage live editing changes for inputs on each card
+  const [editStates, setEditStates] = useState<{
+    [userCoinId: number]: { image1: string; image2: string; notes: string };
+  }>({});
 
-  if (!user) return;
+  async function fetchMyCollection() {
+    const { data: { user } } = await supabase.auth.getUser();
 
-  const scoreToRemove = getScoreFromRarity(rarity);
+    if (!user) {
+      router.push("/login");
+      return;
+    }
 
-  const { error } = await supabase
-    .from("user_coins")
-    .delete()
-    .eq("user_id", user.id)
-    .eq("coin_id", coinId);
-
-  if (error) {
-    alert(error.message);
-    return;
-  }
-
-  await supabase.rpc("decrement_score", {
-  user_id_input: user.id,
-  amount: scoreToRemove,
-});
-
-await checkAchievements(user.id);
-
-alert("Coin removed + score updated!");
-}
-
-  async function getMyCoins() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) return;
-
-    const { data: userCoins, error: userCoinsError } = await supabase
+    // Joins the user_coins table to the primary coins table
+    const { data, error } = await supabase
       .from("user_coins")
-      .select("*")
+      .select(`
+        id,
+        condition,
+        damage,
+        image1,
+        image2,
+        notes,
+        coins (
+          name,
+          year,
+          denomination,
+          metal,
+          obverse_url,
+          reverse_url
+        )
+      `)
       .eq("user_id", user.id);
 
-    if (userCoinsError) {
-      console.log(userCoinsError);
-      return;
+    if (error) {
+      console.error("Error fetching user coins:", error);
+    } else {
+      setUserCoins(data || []);
+      
+      // Initialize editing states from DB values
+      const initialStates: typeof editStates = {};
+      data?.forEach((item) => {
+        initialStates[item.id] = {
+          image1: item.image1 || "",
+          image2: item.image2 || "",
+          notes: item.notes || "",
+        };
+      });
+      setEditStates(initialStates);
     }
+    setLoading(false);
+  }
 
-    const coinIds = userCoins.map((c) => c.coin_id);
+  // Updates local input state dynamically as user types
+  const handleInputChange = (userCoinId: number, field: "image1" | "image2" | "notes", value: string) => {
+    setEditStates((prev) => ({
+      ...prev,
+      [userCoinId]: {
+        ...prev[userCoinId],
+        [field]: value,
+      },
+    }));
+  };
 
-    if (coinIds.length === 0) {
-      setCoins([]);
-      return;
+  // Push updates to Supabase
+  async function saveDetails(userCoinId: number) {
+    const { image1, image2, notes } = editStates[userCoinId];
+
+    const { error } = await supabase
+      .from("user_coins")
+      .update({
+        image1: image1.trim(),
+        image2: image2.trim(),
+        notes: notes.trim(),
+      })
+      .eq("id", userCoinId);
+
+    if (error) {
+      alert("Failed to save changes: " + error.message);
+    } else {
+      alert("Coin details updated successfully!");
+      fetchMyCollection(); // Refresh data
     }
-
-    const { data: coinsData, error: coinsError } = await supabase
-      .from("coins")
-      .select("*")
-      .in("id", coinIds)
-      .order("id", { ascending: true });
-
-    if (coinsError) {
-      console.log(coinsError);
-      return;
-    }
-
-    const mergedCoins = (coinsData || []).map((coin) => {
-      const userCoin = userCoins.find(
-        (u) => u.coin_id === coin.id
-      );
-
-      return {
-        ...coin,
-        userCondition: userCoin?.condition ?? null,
-        userDamage: userCoin?.damage ?? 0,
-      };
-    });
-
-    setCoins(mergedCoins);
   }
 
   useEffect(() => {
-    getMyCoins();
+    fetchMyCollection();
+  }, [router]);
 
-    async function checkUser() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (user) {
-        setUserDisplayName(user.email || "");
-      }
-    }
-
-    checkUser();
-  }, []);
-
-  function getConditionName(condition: number) {
-    const conditions = [
-      "",
-      "P",
-      "FR",
-      "AG",
-      "G",
-      "VG",
-      "F",
-      "VF",
-      "XF",
-      "AU",
-      "LU",
-      "MU",
-      "BU",
-      "HU",
-    ];
-
-    return conditions[condition] || "Unknown";
-  }
-
-  function getProblems(damageNumber: number) {
-    const damage = String(damageNumber)
-      .padStart(5, "0");
-
-    const problems: string[] = [];
-
-    if (damage[0] === "1") problems.push("Damaged");
-    if (damage[0] === "2") problems.push("Heavy Damage");
-
-    if (damage[1] === "1") problems.push("Bent");
-    if (damage[1] === "2") problems.push("Heavily Bent");
-
-    if (damage[2] === "1") problems.push("Cleaned");
-    if (damage[2] === "2") problems.push("Harshly Cleaned");
-
-    if (damage[3] === "1")
-      problems.push("Environmental Damage");
-    if (damage[3] === "2")
-      problems.push("Heavy Environmental Damage");
-
-    if (damage[4] === "1") problems.push("Holed");
-    if (damage[4] === "2") problems.push("Heavily Holed");
-
-    return problems.join(", ");
+  if (loading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-blue-50 text-black">
+        <p className="text-xl font-semibold">Loading your binder...</p>
+      </main>
+    );
   }
 
   return (
     <main className="min-h-screen p-8 bg-blue-50 text-black">
-
-      <div className="flex justify-between items-center mb-8">
-        <div>
-
-          <h1 className="text-4xl font-bold">
-            My Coins
-          </h1>
-
-          {userDisplayName && (
-            <p className="text-gray-700 mt-2">
-              Logged in as: {userDisplayName}
-            </p>
-          )}
-
+      <div className="max-w-6xl mx-auto">
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-4xl font-bold">My Personal Binder</h1>
+          <Link href="/" className="text-blue-600 font-semibold underline hover:text-blue-800">
+            ← Main Collection
+          </Link>
         </div>
 
-        <Link
-          href="/"
-          className="bg-blue-500 text-white px-4 py-2 rounded"
-        >
-          Back Home
-        </Link>
-
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-
-        {coins.map((coin) => (
-
-          <div
-            key={coin.id}
-            className="border p-4 rounded bg-white shadow"
-          >
-
-            <h2 className="text-2xl font-bold">
-              {coin.name}
-            </h2>
-
-            <img
-              src={coin.obverse_url}
-              alt={coin.name}
-              className="w-full h-48 object-contain mt-4"
-            />
-
-            <img
-              src={coin.reverse_url}
-              alt={coin.name}
-              className="w-full h-48 object-contain mt-2"
-            />
-
-            <p>Year: {coin.year}</p>
-
-            <p>
-              Denomination: {coin.denomination}
-            </p>
-
-            <p>
-              Metal: {coin.metal}
-            </p>
-
-            {coin.ruling_authority && (
-              <p>
-                Ruling Authority: {coin.ruling_authority}
-              </p>
-            )}
-
-            {coin.fineness > 0 && (
-              <p>
-                Fineness: {coin.fineness}
-              </p>
-            )}
-
-            <p>
-              Mintage: {coin.mintage}
-            </p>
-
-            <p>
-              Condition:{" "}
-              {getConditionName(
-                coin.userCondition
-              )}
-            </p>
-
-            {coin.userDamage > 0 && (
-              <p>
-                Problems:{" "}
-                {getProblems(
-                  coin.userDamage
-                )}
-              </p>
-            )}
-
-            <p>
-              Rarity:
-              <span
-                className={
-                  coin.rarity >= 70
-                    ? "text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 font-bold ml-2"
-                    : coin.rarity >= 60
-                    ? "text-red-600 font-bold ml-2"
-                    : coin.rarity >= 50
-                    ? "text-purple-600 font-bold ml-2"
-                    : coin.rarity >= 40
-                    ? "text-blue-900 font-bold ml-2"
-                    : coin.rarity >= 30
-                    ? "text-yellow-500 font-bold ml-2"
-                    : coin.rarity >= 20
-                    ? "text-green-500 font-bold ml-2"
-                    : coin.rarity >= 10
-                    ? "text-blue-300 font-bold ml-2"
-                    : "text-gray-500 font-bold ml-2"
-                }
-              >
-                {coin.rarity >= 70
-                  ? "Unique"
-                  : coin.rarity >= 60
-                  ? "Mythic"
-                  : coin.rarity >= 50
-                  ? "Legendary"
-                  : coin.rarity >= 40
-                  ? "Epic"
-                  : coin.rarity >= 30
-                  ? "Rare"
-                  : coin.rarity >= 20
-                  ? "Uncommon"
-                  : coin.rarity >= 10
-                  ? "Common"
-                  : "Basic"}
-              </span>
-            </p>
-            <button
-  className="bg-red-600 text-white px-4 py-2 mt-4 rounded"
-  onClick={() => {
-    if (confirm("Remove this coin from your collection?")) {
-      removeCoin(coin.id, coin.rarity);
-    }
-  }}
->
-  Remove Coin
-</button>
-
+        {userCoins.length === 0 ? (
+          <div className="bg-white p-8 rounded shadow text-center text-gray-500">
+            You don't own any coins yet! Head back to the main catalog to add some.
           </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {userCoins.map((uc) => {
+              const coin = uc.coins;
+              const hasCustomImage = editStates[uc.id]?.image1 || editStates[uc.id]?.image2;
 
-        ))}
+              return (
+                <div key={uc.id} className="border p-4 rounded bg-white shadow flex flex-col justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-2">{coin.name}</h2>
+                    
+                    {/* --- Dynamic Image Render Box --- */}
+                    <div className="space-y-2 mt-4 mb-4">
+                      {hasCustomImage ? (
+                        <>
+                          {editStates[uc.id]?.image1 && (
+                            <img
+                              src={editStates[uc.id].image1}
+                              alt="Custom obverse view"
+                              className="w-full h-48 object-contain rounded border bg-gray-50"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "https://placehold.co/400?text=Invalid+Image+1+URL";
+                              }}
+                            />
+                          )}
+                          {editStates[uc.id]?.image2 && (
+                            <img
+                              src={editStates[uc.id].image2}
+                              alt="Custom reverse view"
+                              className="w-full h-48 object-contain rounded border bg-gray-50"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = "https://placehold.co/400?text=Invalid+Image+2+URL";
+                              }}
+                            />
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <img
+                            src={coin.obverse_url}
+                            alt={`${coin.name} Default Obverse`}
+                            className="w-full h-48 object-contain rounded border"
+                          />
+                          <img
+                            src={coin.reverse_url}
+                            alt={`${coin.name} Default Reverse`}
+                            className="w-full h-48 object-contain rounded border mt-2"
+                          />
+                        </>
+                      )}
+                    </div>
 
+                    <div className="text-sm space-y-1 text-gray-700">
+                      <p><strong>Year:</strong> {coin.year}</p>
+                      <p><strong>Denomination:</strong> {coin.denomination}</p>
+                      <p><strong>Metal:</strong> {coin.metal}</p>
+                      <p><strong>Logged Condition Value:</strong> {uc.condition}</p>
+                      <p><strong>Logged Fault Signature:</strong> {uc.damage}</p>
+                    </div>
+                  </div>
+
+                  {/* --- Micro Input Form Block --- */}
+                  <div className="mt-6 pt-4 border-t border-gray-100">
+                    <div className="flex flex-wrap gap-2 items-center justify-between mb-4">
+                      
+                      {/* Custom Image 1 */}
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-gray-500 font-bold mb-0.5">IMG 1 URL</span>
+                        <input
+                          type="text"
+                          placeholder="Link 1"
+                          value={editStates[uc.id]?.image1 || ""}
+                          onChange={(e) => handleInputChange(uc.id, "image1", e.target.value)}
+                          className="border text-xs p-1 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      {/* Custom Image 2 */}
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-gray-500 font-bold mb-0.5">IMG 2 URL</span>
+                        <input
+                          type="text"
+                          placeholder="Link 2"
+                          value={editStates[uc.id]?.image2 || ""}
+                          onChange={(e) => handleInputChange(uc.id, "image2", e.target.value)}
+                          className="border text-xs p-1 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+
+                      {/* Notes Section */}
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-gray-500 font-bold mb-0.5">Notes</span>
+                        <input
+                          type="text"
+                          placeholder="Your notes..."
+                          value={editStates[uc.id]?.notes || ""}
+                          onChange={(e) => handleInputChange(uc.id, "notes", e.target.value)}
+                          className="border text-xs p-1 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+
+                    </div>
+
+                    <button
+                      onClick={() => saveDetails(uc.id)}
+                      className="w-full bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold py-1.5 rounded transition"
+                    >
+                      Save Details
+                    </button>
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
-
     </main>
   );
 }
