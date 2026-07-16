@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
@@ -54,7 +54,8 @@ function decodeDamageSignature(signature: number | string | null): string {
   return activeDamages.length > 0 ? activeDamages.join(", ") : "None";
 }
 
-export default function MyCoinsPage() {
+// Inner component that handles user interaction and uses search params safely
+function MyCoinsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
@@ -417,5 +418,20 @@ export default function MyCoinsPage() {
         )}
       </div>
     </main>
+  );
+}
+
+// Default export wraps the main logic in Suspense to resolve Next.js build prerendering errors
+export default function MyCoinsPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen flex items-center justify-center bg-blue-50 text-black">
+          <p className="text-xl font-semibold">Loading...</p>
+        </main>
+      }
+    >
+      <MyCoinsContent />
+    </Suspense>
   );
 }
