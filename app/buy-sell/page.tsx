@@ -1,18 +1,43 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabase";
 
 export default function BuySellPage() {
+  const [coins, setCoins] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  async function fetchAllCoins() {
+    // Select all coins where name is not null, ordering by ID
+    const { data, error } = await supabase
+      .from("coins")
+      .select("id, name")
+      .not("name", "is", null)
+      .order("id", { ascending: true });
+
+    if (error) {
+      console.error("Error fetching coins for marketplace:", error.message);
+    } else {
+      setCoins(data || []);
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    fetchAllCoins();
+  }, []);
+
   return (
     <main className="min-h-screen p-8 bg-blue-50 text-black">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         
         {/* Header Section */}
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-4xl font-bold">Coin Marketplace</h1>
             <p className="text-sm text-gray-600 mt-1">
-              Buy and sell historical coins with other collectors.
+              Select a coin denomination/type below to browse available trades or create a listing.
             </p>
           </div>
           
@@ -24,15 +49,38 @@ export default function BuySellPage() {
           </Link>
         </div>
 
-        {/* Empty State / Placeholder Container */}
-        <div className="bg-white rounded-lg shadow-md border p-12 text-center flex flex-col items-center justify-center min-h-[400px]">
-          <div className="text-5xl mb-4">⚖️</div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">
-            Marketplace Coming Soon
+        {/* Coins List Container */}
+        <div className="bg-white rounded-lg shadow border p-6">
+          <h2 className="text-xl font-bold border-b pb-3 mb-4 text-gray-800">
+            Select a Coin Type
           </h2>
-          <p className="text-gray-500 max-w-md">
-            The buy and sell portal is currently empty. This space will soon allow you to list duplicate coins for trade or purchase direct listings from other collectors.
-          </p>
+
+          {loading ? (
+            <div className="text-center py-8 text-gray-500 font-medium">
+              Loading marketplace catalog...
+            </div>
+          ) : coins.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              No coins found in catalog.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {coins.map((coin) => (
+                <Link
+                  key={coin.id}
+                  href={`/buy-sell/${coin.id}`}
+                  className="p-3 border rounded-lg bg-gray-50 hover:bg-blue-50 hover:border-blue-300 transition text-left font-medium text-gray-700 flex justify-between items-center group"
+                >
+                  <span className="group-hover:text-blue-700 transition">
+                    {coin.name}
+                  </span>
+                  <span className="text-xs text-gray-400 group-hover:text-blue-400 transition">
+                    Trade →
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>
