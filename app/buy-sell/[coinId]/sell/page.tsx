@@ -12,17 +12,19 @@ export default function SellSpecificCoinPage() {
 
   const [coin, setCoin] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  // Form states
+  // Form states - Images
   const [image1, setImage1] = useState("");
   const [image2, setImage2] = useState("");
   const [image3, setImage3] = useState("");
   const [image4, setImage4] = useState("");
 
+  // Form states - Coin attributes
   const [graded, setGraded] = useState("raw"); // "ngc/pcgs graded", "raw", "other graded"
   const [isProblem, setIsProblem] = useState(false);
 
-  // Problem Checkboxes state
   const [problems, setProblems] = useState({
     damaged: false,
     bent: false,
@@ -31,32 +33,32 @@ export default function SellSpecificCoinPage() {
     holed: false,
   });
 
-  // Condition dropdown (Shown if 'raw' is selected OR any 'problem' is active)
   const [condition, setCondition] = useState("VF");
-
-  // Numeric Grade state (1-70, shown if NOT raw AND NOT a problem)
   const [numericGrade, setNumericGrade] = useState<number>(60);
+  const [color, setColor] = useState("none"); 
+  const [designation, setDesignation] = useState("none"); 
+  const [gradeSuffix, setGradeSuffix] = useState("normal"); 
 
-  // Specific numeric coin attributes
-  const [color, setColor] = useState("none"); // none, Brown, Red-Brown, Red
-  const [designation, setDesignation] = useState("none"); // none, proof like, deep mirror proof like, proof, cameo, deep cameo
-  const [gradeSuffix, setGradeSuffix] = useState("normal"); // normal, +, *, +*
+  // NEW form fields
+  const [notes, setNotes] = useState("");
+  const [priceInput, setPriceInput] = useState("");
+  const [communication, setCommunication] = useState("");
+  const [proxyListing, setProxyListing] = useState(false);
 
-  // Check if current setup requires the simplified Condition drop-down
-  // Condition Dropdown is active if:
-  // - Graded equals "raw"
-  // - OR "Problem" checkbox is checked (as problem coins typically receive details grades)
   const showConditionDropdown = graded === "raw" || isProblem;
+
+  // Render Image Preview grid
+  const imageUrls = [image1, image2, image3, image4].filter((url) => url.trim() !== "");
 
   async function fetchCoinData() {
     if (!coinId) return;
 
-    // Direct auth protection: force user to have perm >= 10
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       router.push("/login");
       return;
     }
+    setUserId(user.id);
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -77,7 +79,7 @@ export default function SellSpecificCoinPage() {
       .single();
 
     if (error) {
-      console.error(error);
+      console.error("Error retrieving coin parameters:", error);
     } else {
       setCoin(data);
     }
@@ -89,11 +91,64 @@ export default function SellSpecificCoinPage() {
   }, [coinId]);
 
   const handleProblemCheckboxChange = (key: keyof typeof problems) => {
-    setProblems((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+    setProblems((prev) => ({ ...prev, [key]: !prev[key] }));
   };
+
+  async function handleSaveListing() {
+    if (!userId || !coinId) return;
+    
+    // Parse and validate price
+    const rawPrice = parseFloat(priceInput);
+    if (isNaN(rawPrice) || rawPrice < 0 || rawPrice > 100000000) {
+      alert("Please enter a valid price between €0.00 and €100,000,000.00");
+      return;
+    }
+
+    // Round price to nearest 0.01 cent before storing
+    const roundedPrice = Math.round(rawPrice * 100) / 100;
+
+    setSubmitting(true);
+
+    // Swap input option UNC to save internally as LU
+    const databaseCondition = showConditionDropdown 
+      ? (condition === "UNC" ? "LU" : condition) 
+      : null;
+
+    const payload = {
+      coin_id: parseInt(coinId as string),
+      seller_id: userId,
+      image_1: image1.trim() || null,
+      image_2: image2.trim() || null,
+      image_3: image3.trim() || null,
+      image_4: image4.trim() || null,
+      graded,
+      is_problem: isProblem,
+      problems: isProblem ? problems : null,
+      condition: databaseCondition,
+      numeric_grade: showConditionDropdown ? null : numericGrade,
+      grade_suffix: showConditionDropdown ? null : gradeSuffix,
+      color: showConditionDropdown ? null : color,
+      designation: showConditionDropdown ? null : designation,
+      notes: notes.trim() || null,
+      price: roundedPrice,
+      communication: communication.trim() || null,
+      proxy_listing: proxyListing
+    };
+
+    const { error } = await supabase
+      .from("coin_listings")
+      .insert([payload]);
+
+    setSubmitting(false);
+
+    if (error) {
+      alert(`Error saving listing: ${error.message}`);
+      console.error(error);
+    } else {
+      alert("Listing successfully saved!");
+      router.push(`/buy-sell/${coinId}`);
+    }
+  }
 
   if (loading) {
     return (
@@ -108,7 +163,7 @@ export default function SellSpecificCoinPage() {
       <div className="max-w-2xl mx-auto">
         
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-3xl font-bold">List Coin for Sale</h1>
             <p className="text-sm text-gray-600 mt-1">
@@ -119,11 +174,33 @@ export default function SellSpecificCoinPage() {
             href={`/buy-sell/${coinId}`}
             className="text-blue-600 font-semibold underline hover:text-blue-800 transition"
           >
-            ← Back
+            ← Cancel
           </Link>
         </div>
 
-        {/* Dynamic Listing Form Container */}
+        {/* Dynamic Photo Preview Strip */}
+        {imageUrls.length > 0 && (
+          <div className="bg-white rounded-lg shadow border p-4 mb-6">
+            <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Live Image Previews</h4>
+            <div className="grid grid-cols-4 gap-2">
+              {imageUrls.map((url, idx) => (
+                <div key={idx} className="relative aspect-square bg-gray-100 rounded border overflow-hidden">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={url}
+                    alt={`Preview ${idx + 1}`}
+                    className="object-cover w-full h-full"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "https://placehold.co/150?text=Invalid+Image+URL";
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Listing Form */}
         <div className="bg-white shadow rounded-lg border p-6 space-y-6">
           
           {/* 1. Image URL Inputs */}
@@ -202,7 +279,6 @@ export default function SellSpecificCoinPage() {
               </label>
             </div>
 
-            {/* Rendered Problems Checkbox List */}
             <div className={`grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2 transition-opacity duration-200 ${
               isProblem ? "opacity-100" : "opacity-40 pointer-events-none"
             }`}>
@@ -224,10 +300,9 @@ export default function SellSpecificCoinPage() {
             </div>
           </div>
 
-          {/* 4. Grade Metrics Logic Selection */}
+          {/* 4. Grade Metrics */}
           <div className="p-4 bg-blue-50/30 rounded-lg border border-blue-100">
             {showConditionDropdown ? (
-              /* If coin is RAW or has a PROBLEM: Render raw grade dropdown */
               <div>
                 <label className="block text-sm font-bold text-gray-800 mb-2">
                   Market Condition (Adjectival Grade)
@@ -254,7 +329,6 @@ export default function SellSpecificCoinPage() {
                 </select>
               </div>
             ) : (
-              /* If coin is slabbed/graded and clean: Render strict numerical input parameters */
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -332,15 +406,76 @@ export default function SellSpecificCoinPage() {
             )}
           </div>
 
-          {/* 5. Save Button (Functional placeholder) */}
+          {/* 5. Additional Information & Pricing Fields */}
+          <div className="space-y-4 border-t pt-4">
+            <div>
+              <label className="block text-sm font-bold text-gray-800 mb-1">Notes</label>
+              <textarea
+                placeholder="Describe eye appeal, defects, strike characteristics, history..."
+                rows={3}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="w-full border p-2.5 rounded bg-gray-50 text-sm focus:ring-1 focus:ring-green-500 outline-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-800 mb-1">Price (€)</label>
+                <div className="relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 sm:text-sm">€</span>
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100000000"
+                    placeholder="0.00"
+                    value={priceInput}
+                    onChange={(e) => setPriceInput(e.target.value)}
+                    className="w-full border pl-8 p-2.5 rounded bg-gray-50 text-sm focus:ring-1 focus:ring-green-500 outline-none font-semibold"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-800 mb-1">Preferred Communication</label>
+                <input
+                  type="text"
+                  placeholder="Discord, Email, PM, Telegram..."
+                  value={communication}
+                  onChange={(e) => setCommunication(e.target.value)}
+                  className="w-full border p-2.5 rounded bg-gray-50 text-sm focus:ring-1 focus:ring-green-500 outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center p-3 bg-gray-50 rounded-lg border">
+              <input
+                type="checkbox"
+                id="proxy-checkbox"
+                checked={proxyListing}
+                onChange={(e) => setProxyListing(e.target.checked)}
+                className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+              />
+              <label htmlFor="proxy-checkbox" className="ml-2 text-sm text-gray-700 cursor-pointer select-none font-semibold">
+                I am making this listing for someone else
+              </label>
+            </div>
+          </div>
+
+          {/* 6. Save Button */}
           <button
             type="button"
-            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg shadow transition duration-200 mt-4 text-center cursor-not-allowed opacity-80"
-            onClick={() => {
-              alert("Awesome setup! This listing configuration is validated. Saving logic database integration is coming next!");
-            }}
+            disabled={submitting}
+            onClick={handleSaveListing}
+            className={`w-full bg-green-600 hover:bg-green-700 text-white font-bold py-4 px-6 rounded-lg shadow-md transition duration-200 mt-4 text-center ${
+              submitting ? "opacity-50 cursor-wait" : ""
+            }`}
           >
-            Save Coin Listing
+            {submitting ? "Saving Listing..." : "Save Coin Listing"}
           </button>
 
         </div>
