@@ -161,7 +161,7 @@ export default function ListingDetailsPage() {
                   <p className="text-gray-500">Condition/Grade</p>
                   <p className="font-semibold text-gray-800">
                     {listing.graded !== "raw" && !listing.is_problem
-                      ? `MS-${listing.numeric_grade}${listing.grade_suffix !== "normal" ? ` ${listing.grade_suffix}` : ""}`
+                      ? `${listing.numeric_grade}${listing.grade_suffix !== "normal" ? ` ${listing.grade_suffix}` : ""}`
                       : listing.condition || "Details"}
                   </p>
                 </div>
