@@ -2,18 +2,33 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
-import { supabase } from "../../../lib/supabase"; // adjust route depth if needed
+import { useParams, useRouter } from "next/navigation";
+import { supabase } from "../../../lib/supabase";
 
 export default function CoinTradePortal() {
   const params = useParams();
+  const router = useRouter();
   const coinId = params.coinId;
 
   const [coin, setCoin] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [userPerms, setUserPerms] = useState<number>(0);
 
-  async function fetchCoinDetails() {
+  async function fetchPageData() {
     if (!coinId) return;
+
+    // 1. Get user and permission level
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("perms")
+        .eq("id", user.id)
+        .single();
+      setUserPerms(profile?.perms || 1);
+    }
+
+    // 2. Get Coin Details
     const { data, error } = await supabase
       .from("coins")
       .select("name, year, denomination")
@@ -29,7 +44,7 @@ export default function CoinTradePortal() {
   }
 
   useEffect(() => {
-    fetchCoinDetails();
+    fetchPageData();
   }, [coinId]);
 
   if (loading) {
@@ -45,7 +60,7 @@ export default function CoinTradePortal() {
       <div className="max-w-4xl mx-auto">
         
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex justify-between items-start mb-8">
           <div>
             <h1 className="text-3xl font-bold">
               {coin ? `${coin.name} (${coin.year})` : "Coin Marketplace"}
@@ -55,12 +70,30 @@ export default function CoinTradePortal() {
             </p>
           </div>
           
-          <Link 
-            href="/buy-sell" 
-            className="text-blue-600 font-semibold underline hover:text-blue-800 transition"
-          >
-            ← Back to Marketplace
-          </Link>
+          <div className="flex items-center gap-4">
+            {/* SELL THIS COIN ACTION: ONLY Visible if perms >= 10 */}
+            {userPerms >= 10 && (
+              <div className="flex flex-col items-center">
+                <button
+                  onClick={() => router.push(`/buy-sell/${coinId}/sell`)}
+                  className="bg-green-500 hover:bg-green-600 text-white rounded-full h-12 w-12 flex items-center justify-center text-2xl font-bold shadow-md hover:shadow-lg transition duration-200"
+                  title="Sell your version of this coin"
+                >
+                  +
+                </button>
+                <span className="text-xs font-bold text-green-700 mt-1">
+                  sell this coin
+                </span>
+              </div>
+            )}
+
+            <Link 
+              href="/buy-sell" 
+              className="text-blue-600 font-semibold underline hover:text-blue-800 transition"
+            >
+              ← Back to Marketplace
+            </Link>
+          </div>
         </div>
 
         {/* Main Content Card Placeholder */}
