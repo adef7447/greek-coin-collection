@@ -259,6 +259,9 @@ export default function Home() {
         <Link href="/info" className="text-blue-600 font-semibold underline hover:text-blue-800">
           Info Page
         </Link>
+        <Link href="/buy-sell" className="text-blue-600 font-semibold underline hover:text-blue-800">
+  Buy/Sell
+</Link>
       </div>
 
       {/* TOP CATEGORY FILTERS */}

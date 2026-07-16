@@ -16,10 +16,10 @@ const CONDITION_MAP: { [key: number]: string } = {
   7: "VF (Very Fine)",
   8: "XF (Extremely Fine)",
   9: "AU (About Uncirculated)",
-  10: "LU (Lustrous Uncirculated)",
-  11: "MU (Mint Uncirculated)",
+  10: "LU (Low Uncirculated)",
+  11: "MU (Middle Uncirculated)",
   12: "BU (Brilliant Uncirculated)",
-  13: "HU (Highly Uncirculated)"
+  13: "HU (High Uncirculated)"
 };
 
 // Helper function to decode the 5-digit damage signature (e.g., 10201)
