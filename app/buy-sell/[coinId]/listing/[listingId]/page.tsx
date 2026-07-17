@@ -11,7 +11,6 @@ export default function ListingDetailsPage() {
   const router = useRouter();
   
   const coinId = params.coinId;
-  // Fallback chain: attempts to find the identifier regardless of folder naming choice
   const listingId = params.id || params.listingId || params.slug;
 
   const [coin, setCoin] = useState<any>(null);
@@ -45,7 +44,7 @@ export default function ListingDetailsPage() {
         try {
           const { data: profile } = await supabase
             .from("profiles")
-            .select("perms")
+            .select("*")
             .eq("id", authData.user.id)
             .maybeSingle();
           
@@ -55,13 +54,10 @@ export default function ListingDetailsPage() {
         }
       }
 
-      // 2. Fetch listing details and join the seller's profile
+      // 2. Fetch listing details standalone (Removes the crashing join syntax)
       const { data: listingData, error: listingErr } = await supabase
         .from("coin_listings")
-        .select(`
-          *,
-          seller_profile:profiles(username, perms)
-        `)
+        .select("*")
         .eq("id", listingId)
         .maybeSingle();
 
@@ -69,16 +65,36 @@ export default function ListingDetailsPage() {
         console.error("Database error fetching listing details:", listingErr.message);
         setDebugError(`Table [coin_listings] Error: ${listingErr.message}`);
       } else if (listingData) {
+        
+        // 3. Fetch seller profile separately to prevent strict column/relationship failures
+        try {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("*") // select * avoids SQL syntax crashes if 'username' column is missing
+            .eq("id", listingData.seller_id)
+            .maybeSingle();
+
+          // Safe mapping with structural fallbacks
+          listingData.seller_profile = {
+            username: profileData?.username || profileData?.display_name || profileData?.full_name || "Collector",
+            perms: profileData?.perms || 1
+          };
+        } catch (profileFetchErr) {
+          console.error("Failed to attach seller profile cleanly:", profileFetchErr);
+          listingData.seller_profile = { username: "Collector", perms: 1 };
+        }
+
         setListing(listingData);
+        
         const images = [listingData.image_1, listingData.image_2, listingData.image_3, listingData.image_4].filter(Boolean);
         if (images.length > 0) {
           setActiveImage(images[0]);
         }
       } else {
-        setDebugError(`No matching row found in [coin_listings] for ID value "${listingId}". Check if this row index exists in Supabase.`);
+        setDebugError(`No matching row found in [coin_listings] for ID value "${listingId}".`);
       }
 
-      // 3. Fetch parent coin metadata
+      // 4. Fetch parent coin metadata
       const { data: coinData, error: coinErr } = await supabase
         .from("coins")
         .select("name, year")
