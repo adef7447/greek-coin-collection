@@ -18,7 +18,7 @@ export default function ListingDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [userPerms, setUserPerms] = useState<number>(1); // Default to Member (1)
+  const [userPerms, setUserPerms] = useState<number>(1); // Defaults to level 1 safely
   const [debugError, setDebugError] = useState<string | null>(null);
 
   // Map permission levels to titles for clean diagnostic outputs
@@ -36,22 +36,19 @@ export default function ListingDetailsPage() {
     return "Member";
   };
 
-  // Explicit business rule implementation for authorization checks
+  // Business logic rules for authorization checks
   const checkModAuthority = (modLevel: number, authorLevel: number): boolean => {
-    if (modLevel >= 1000) return true; // Owner bypasses everything
-    if (modLevel < 100) return false;  // Below staff threshold
+    if (modLevel >= 1000) return true; // Owner overrides ceilings
+    if (modLevel < 100) return false;  // Disallow basic users
 
     if (modLevel === 100) {
-      // Assistant Mod: can remove listings from official sellers (40) and below
-      return authorLevel <= 40;
+      return authorLevel <= 40; // Assistant Mod ceiling
     }
     if (modLevel === 110) {
-      // Mod: can remove listings from verified sellers (50) and below
-      return authorLevel <= 50;
+      return authorLevel <= 50; // Mod ceiling
     }
     
-    // Senior Mod (150) & Admin (200): can remove all lower ranks below them
-    return modLevel > authorLevel;
+    return modLevel > authorLevel; // Senior Mod / Admin hierarchy rule
   };
 
   async function fetchListingDetails() {
@@ -64,30 +61,38 @@ export default function ListingDetailsPage() {
     try {
       setDebugError(null);
 
-      // 1. Fetch current authentic session
+      // 1. Fetch authentic user session with loud explicit bug traps
       const { data: authData, error: authErr } = await supabase.auth.getUser();
       
       if (authErr) {
-        console.warn("Auth check skipped or user unauthenticated:", authErr.message);
+        console.error("Supabase Auth Error:", authErr.message);
+        setDebugError(`Supabase Auth Error: ${authErr.message}`);
       }
 
       if (authData?.user) {
         setCurrentUserId(authData.user.id);
         
-        try {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", authData.user.id)
-            .maybeSingle();
-          
-          setUserPerms(profile?.perms !== undefined ? profile.perms : 1);
-        } catch (profileErr) {
-          console.error("Failed to query profile permissions safely:", profileErr);
+        const { data: profile, error: profileErr } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", authData.user.id)
+          .maybeSingle();
+        
+        if (profileErr) {
+          console.error("Profiles Table Query Failed:", profileErr.message);
+          setDebugError(`Profiles Table Query Failed: ${profileErr.message}`);
+        } else if (!profile) {
+          console.warn(`Auth user exists (${authData.user.id}), but no profile row found.`);
+          setDebugError(`Auth row verified (${authData.user.id}), but no matching profile row exists in the [profiles] table schema.`);
+        } else {
+          setUserPerms(profile.perms !== undefined ? profile.perms : 1);
         }
+      } else {
+        console.warn("No active authenticated user session found.");
+        setDebugError("Supabase Auth reports you are completely logged out. No valid user token detected on this route layout.");
       }
 
-      // 2. Fetch target listing details safely
+      // 2. Fetch target listing details standalone
       const { data: listingData, error: listingErr } = await supabase
         .from("coin_listings")
         .select("*")
@@ -123,7 +128,8 @@ export default function ListingDetailsPage() {
           setActiveImage(images[0]);
         }
       } else {
-        setDebugError(`No matching row found in [coin_listings] for ID value "${listingId}".`);
+        // Only set if an auth bug didn't already override the error stream
+        setDebugError((prev) => prev || `No matching row found in [coin_listings] for ID value "${listingId}".`);
       }
 
       // 4. Load Parent Catalog Entry
@@ -327,6 +333,13 @@ export default function ListingDetailsPage() {
               <p className="pt-1">Staff Clearance Level (≥100): {userPerms >= 100 ? "✅ Passed" : "❌ Failed"}</p>
               <p>Target Match Authorized: {isModerator ? "✅ Authorized" : "❌ Unauthorized (Ceiling Violation)"}</p>
               <p>Control Panels Rendered: {isModerator ? <span className="text-purple-700 font-bold">YES</span> : "NO"}</p>
+              
+              {/* Loud Diagnostic Injector Output */}
+              {debugError && (
+                <div className="mt-2 pt-2 border-t border-red-100 text-[11px] text-red-600 font-sans font-semibold">
+                  ⚠️ System Trace: {debugError}
+                </div>
+              )}
             </div>
           </div>
 
