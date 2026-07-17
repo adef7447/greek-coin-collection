@@ -4,14 +4,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../../lib/supabase";
-// 1. Added the clean relative import to your badge component
 import UserBadge from "@/app/src/components/UserBadge";
-// 2. Removed the rogue "npm.cmd run dev" command from this line
+
 export default function ListingDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const coinId = params.coinId;
-  const listingId = params.listingId;
+  const listingId = params.id;
 
   const [coin, setCoin] = useState<any>(null);
   const [listing, setListing] = useState<any>(null);
@@ -23,50 +22,55 @@ export default function ListingDetailsPage() {
   async function fetchListingDetails() {
     if (!listingId || !coinId) return;
 
-    // 1. Get current logged in user and their permission level
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      setCurrentUserId(user.id);
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("perms")
-        .eq("id", user.id)
-        .single();
-      setUserPerms(profile?.perms || 1);
-    }
-
-    // 2. Fetch listing details and join the seller's profile
-    const { data: listingData, error: listingErr } = await supabase
-      .from("coin_listings")
-      .select(`
-        *,
-        seller_profile:profiles(username, perms)
-      `)
-      .eq("id", listingId)
-      .single();
-
-    if (listingErr) {
-      console.error("Error fetching listing details:", listingErr.message);
-    } else {
-      setListing(listingData);
-      const images = [listingData.image_1, listingData.image_2, listingData.image_3, listingData.image_4].filter(Boolean);
-      if (images.length > 0) {
-        setActiveImage(images[0]);
+    try {
+      // 1. Get current logged-in user safely first
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("perms")
+          .eq("id", user.id)
+          .maybeSingle(); // Prevents throwing an error if record isn't fully ready
+        
+        setUserPerms(profile?.perms || 1);
       }
+
+      // 2. Fetch listing details and join the seller's profile
+      const { data: listingData, error: listingErr } = await supabase
+        .from("coin_listings")
+        .select(`
+          *,
+          seller_profile:profiles(username, perms)
+        `)
+        .eq("id", listingId)
+        .maybeSingle(); // Using maybeSingle avoids hard crashes if listingId is slightly formatted differently
+
+      if (listingErr) {
+        console.error("Error fetching listing details:", listingErr.message);
+      } else if (listingData) {
+        setListing(listingData);
+        const images = [listingData.image_1, listingData.image_2, listingData.image_3, listingData.image_4].filter(Boolean);
+        if (images.length > 0) {
+          setActiveImage(images[0]);
+        }
+      }
+
+      // 3. Fetch parent coin metadata
+      const { data: coinData } = await supabase
+        .from("coins")
+        .select("name, year")
+        .eq("id", coinId)
+        .maybeSingle();
+
+      if (coinData) {
+        setCoin(coinData);
+      }
+    } catch (err) {
+      console.error("Unexpected error loading data:", err);
+    } finally {
+      setLoading(false);
     }
-
-    // 3. Fetch parent coin meta
-    const { data: coinData } = await supabase
-      .from("coins")
-      .select("name, year")
-      .eq("id", coinId)
-      .single();
-
-    if (coinData) {
-      setCoin(coinData);
-    }
-
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -201,13 +205,13 @@ export default function ListingDetailsPage() {
           {/* Right Column: Details Card */}
           <div className="bg-white rounded-lg shadow border p-6 space-y-6 flex flex-col justify-between">
             <div className="space-y-6">
-              {/* Dynamic Price Display (Turns Red when Sold) */}
+              {/* Dynamic Price Display */}
               <div>
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Asking Price</span>
                 <span className={`text-3xl font-black transition-colors duration-200 ${
                   isSold ? "text-red-600 line-through decoration-2" : "text-green-700"
                 }`}>
-                  €{parseFloat(listing.price).toFixed(2)} {isSold && "(SOLD)"}
+                  €{listing.price ? parseFloat(listing.price).toFixed(2) : "0.00"} {isSold && "(SOLD)"}
                 </span>
               </div>
 
@@ -267,7 +271,7 @@ export default function ListingDetailsPage() {
                 </div>
               )}
 
-              {/* Seller Information (Username + Visual Badges) */}
+              {/* Seller Information */}
               <div className="border-t pt-4">
                 <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Seller</h3>
                 <div className="flex items-center gap-2 bg-gray-50 p-3 rounded border">
@@ -299,7 +303,7 @@ export default function ListingDetailsPage() {
               </div>
             </div>
 
-            {/* Seller Action Control Panel (Only if listing owner matches seller_id) */}
+            {/* Seller Action Control Panel */}
             {isOwner && (
               <div className="border-t pt-6 mt-auto space-y-3">
                 <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Listing Management</p>
