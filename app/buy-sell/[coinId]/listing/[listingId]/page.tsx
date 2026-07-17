@@ -18,8 +18,41 @@ export default function ListingDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [userPerms, setUserPerms] = useState<number>(0);
+  const [userPerms, setUserPerms] = useState<number>(1); // Default to Member (1)
   const [debugError, setDebugError] = useState<string | null>(null);
+
+  // Map permission levels to titles for clean diagnostic outputs
+  const getRoleTitle = (perms: number) => {
+    if (perms >= 1000) return "Owner 👑";
+    if (perms >= 200) return "Admin 🏛️";
+    if (perms >= 150) return "Senior Mod 🎖️";
+    if (perms >= 110) return "Mod ⚔️";
+    if (perms >= 100) return "Assistant Mod 🛡️";
+    if (perms >= 50) return "Verified Seller 🔷";
+    if (perms >= 40) return "Official Seller";
+    if (perms >= 30) return "Verified Member 🟢";
+    if (perms >= 20) return "Official Member";
+    if (perms === 0) return "Punished 🚫";
+    return "Member";
+  };
+
+  // Explicit business rule implementation for authorization checks
+  const checkModAuthority = (modLevel: number, authorLevel: number): boolean => {
+    if (modLevel >= 1000) return true; // Owner bypasses everything
+    if (modLevel < 100) return false;  // Below staff threshold
+
+    if (modLevel === 100) {
+      // Assistant Mod: can remove listings from official sellers (40) and below
+      return authorLevel <= 40;
+    }
+    if (modLevel === 110) {
+      // Mod: can remove listings from verified sellers (50) and below
+      return authorLevel <= 50;
+    }
+    
+    // Senior Mod (150) & Admin (200): can remove all lower ranks below them
+    return modLevel > authorLevel;
+  };
 
   async function fetchListingDetails() {
     if (!listingId || !coinId) {
@@ -31,7 +64,7 @@ export default function ListingDetailsPage() {
     try {
       setDebugError(null);
 
-      // 1. Get current logged-in user safely first
+      // 1. Fetch current authentic session
       const { data: authData, error: authErr } = await supabase.auth.getUser();
       
       if (authErr) {
@@ -48,13 +81,13 @@ export default function ListingDetailsPage() {
             .eq("id", authData.user.id)
             .maybeSingle();
           
-          setUserPerms(profile?.perms || 1);
+          setUserPerms(profile?.perms !== undefined ? profile.perms : 1);
         } catch (profileErr) {
           console.error("Failed to query profile permissions safely:", profileErr);
         }
       }
 
-      // 2. Fetch listing details standalone (Removes the crashing join syntax)
+      // 2. Fetch target listing details safely
       const { data: listingData, error: listingErr } = await supabase
         .from("coin_listings")
         .select("*")
@@ -66,18 +99,17 @@ export default function ListingDetailsPage() {
         setDebugError(`Table [coin_listings] Error: ${listingErr.message}`);
       } else if (listingData) {
         
-        // 3. Fetch seller profile separately to prevent strict column/relationship failures
+        // 3. Fetch independent user profile record for the seller
         try {
           const { data: profileData } = await supabase
             .from("profiles")
-            .select("*") // select * avoids SQL syntax crashes if 'username' column is missing
+            .select("*")
             .eq("id", listingData.seller_id)
             .maybeSingle();
 
-          // Safe mapping with structural fallbacks
           listingData.seller_profile = {
             username: profileData?.username || profileData?.display_name || profileData?.full_name || "Collector",
-            perms: profileData?.perms || 1
+            perms: profileData?.perms !== undefined ? profileData.perms : 1
           };
         } catch (profileFetchErr) {
           console.error("Failed to attach seller profile cleanly:", profileFetchErr);
@@ -94,7 +126,7 @@ export default function ListingDetailsPage() {
         setDebugError(`No matching row found in [coin_listings] for ID value "${listingId}".`);
       }
 
-      // 4. Fetch parent coin metadata
+      // 4. Load Parent Catalog Entry
       const { data: coinData, error: coinErr } = await supabase
         .from("coins")
         .select("name, year")
@@ -118,26 +150,20 @@ export default function ListingDetailsPage() {
     fetchListingDetails();
   }, [listingId, coinId]);
 
-  // Action: Mark Listing as Sold
+  // Action Handlers
   async function handleMarkAsSold() {
     if (!listing) return;
-    
     const { error } = await supabase
       .from("coin_listings")
       .update({ status: "sold" })
       .eq("id", listing.id);
 
-    if (error) {
-      alert(`Error setting status: ${error.message}`);
-    } else {
-      setListing({ ...listing, status: "sold" });
-    }
+    if (error) alert(`Error setting status: ${error.message}`);
+    else setListing({ ...listing, status: "sold" });
   }
 
-  // Action: Delete Listing
   async function handleDeleteListing() {
     if (!listing) return;
-
     const confirmDelete = confirm("Are you sure you want to delete this listing permanently?");
     if (!confirmDelete) return;
 
@@ -150,6 +176,42 @@ export default function ListingDetailsPage() {
       alert(`Error deleting listing: ${error.message}`);
     } else {
       alert("Listing permanently deleted.");
+      router.push(`/buy-sell/${coinId}`);
+    }
+  }
+
+  async function handleModToggleHide() {
+    if (!listing) return;
+    const isCurrentlyHidden = listing.status === "hidden";
+    const nextStatus = isCurrentlyHidden ? "active" : "hidden";
+
+    const { error } = await supabase
+      .from("coin_listings")
+      .update({ status: nextStatus })
+      .eq("id", listing.id);
+
+    if (error) {
+      alert(`Moderator Update Failed: ${error.message}`);
+    } else {
+      setListing({ ...listing, status: nextStatus });
+      alert(`Listing visibility altered to: ${nextStatus}`);
+    }
+  }
+
+  async function handleModForceDelete() {
+    if (!listing) return;
+    const confirmModDelete = confirm(`🛡️ MODERATOR ACTION: Permanently remove this listing posted by level ${listing.seller_profile?.perms}? This cannot be undone.`);
+    if (!confirmModDelete) return;
+
+    const { error } = await supabase
+      .from("coin_listings")
+      .delete()
+      .eq("id", listing.id);
+
+    if (error) {
+      alert(`Moderator Force Deletion Failed: ${error.message}`);
+    } else {
+      alert("Listing permanently cleared by staff authority.");
       router.push(`/buy-sell/${coinId}`);
     }
   }
@@ -169,7 +231,6 @@ export default function ListingDetailsPage() {
           <h1 className="text-2xl font-bold text-red-600">Listing Not Found</h1>
           <p className="mt-2 text-gray-600 text-sm">Your route parameter keys don't match your structural layout setup.</p>
           
-          {/* Diagnostic Box */}
           <div className="mt-6 p-4 bg-gray-50 rounded-lg text-left border border-gray-200 text-xs font-mono space-y-1.5 text-gray-700">
             <p className="font-bold text-gray-900 border-b pb-1 mb-2 font-sans text-sm">🔍 Dynamic Route Check:</p>
             <p><strong>All Route Params:</strong> {JSON.stringify(params)}</p>
@@ -189,7 +250,11 @@ export default function ListingDetailsPage() {
   const allImages = [listing.image_1, listing.image_2, listing.image_3, listing.image_4].filter(Boolean);
   const isOwner = currentUserId === listing.seller_id;
   const isSold = listing.status === "sold";
-  const sellerPerms = listing.seller_profile?.perms || 1;
+  const isHidden = listing.status === "hidden";
+  const sellerPerms = listing.seller_profile?.perms ?? 1;
+
+  // Evaluate authority matching your exact staff boundaries
+  const isModerator = checkModAuthority(userPerms, sellerPerms);
 
   return (
     <main className="min-h-screen p-8 bg-blue-50 text-black">
@@ -214,7 +279,7 @@ export default function ListingDetailsPage() {
         {/* Display Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           
-          {/* Left Column: Image Showcase */}
+          {/* Left Column: Image Showcase & Dev Monitor */}
           <div className="space-y-4">
             {activeImage ? (
               <div className="bg-white rounded-lg shadow border p-2">
@@ -253,19 +318,35 @@ export default function ListingDetailsPage() {
                 ))}
               </div>
             )}
+
+            {/* Hierarchy Status Monitor */}
+            <div className="bg-white rounded-lg shadow border p-4 text-xs font-mono text-gray-600 space-y-1">
+              <p className="font-bold font-sans text-gray-800 border-b pb-1 mb-1">🛡️ Hierarchy Authority Check</p>
+              <p>Your Level: <span className="font-bold text-blue-700">{userPerms} ({getRoleTitle(userPerms)})</span></p>
+              <p>Seller Level: <span className="font-bold text-gray-700">{sellerPerms} ({getRoleTitle(sellerPerms)})</span></p>
+              <p className="pt-1">Staff Clearance Level (≥100): {userPerms >= 100 ? "✅ Passed" : "❌ Failed"}</p>
+              <p>Target Match Authorized: {isModerator ? "✅ Authorized" : "❌ Unauthorized (Ceiling Violation)"}</p>
+              <p>Control Panels Rendered: {isModerator ? <span className="text-purple-700 font-bold">YES</span> : "NO"}</p>
+            </div>
           </div>
 
           {/* Right Column: Details Card */}
           <div className="bg-white rounded-lg shadow border p-6 space-y-6 flex flex-col justify-between">
             <div className="space-y-6">
-              {/* Dynamic Price Display */}
-              <div>
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Asking Price</span>
-                <span className={`text-3xl font-black transition-colors duration-200 ${
-                  isSold ? "text-red-600 line-through decoration-2" : "text-green-700"
-                }`}>
-                  €{listing.price ? parseFloat(listing.price).toFixed(2) : "0.00"} {isSold && "(SOLD)"}
-                </span>
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">Asking Price</span>
+                  <span className={`text-3xl font-black transition-colors duration-200 ${
+                    isSold ? "text-red-600 line-through decoration-2" : isHidden ? "text-purple-600" : "text-green-700"
+                  }`}>
+                    €{listing.price ? parseFloat(listing.price).toFixed(2) : "0.00"} {isSold && "(SOLD)"} {isHidden && "(HIDDEN)"}
+                  </span>
+                </div>
+                {isHidden && (
+                  <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2.5 py-1 rounded-full border border-purple-200">
+                    🛡️ Moderated
+                  </span>
+                )}
               </div>
 
               {/* Grading Details */}
@@ -347,41 +428,67 @@ export default function ListingDetailsPage() {
                     )}
                   </p>
                 </div>
-
-                {listing.proxy_listing && (
-                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800 font-semibold">
-                    ⚠️ This listing is posted on behalf of another collector (Proxy Listing).
-                  </div>
-                )}
               </div>
             </div>
 
-            {/* Seller Action Control Panel */}
-            {isOwner && (
-              <div className="border-t pt-6 mt-auto space-y-3">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Listing Management</p>
-                <div className="grid grid-cols-2 gap-4">
-                  {!isSold ? (
+            {/* Lower Layout Action Blocks */}
+            <div className="border-t pt-4 space-y-4 mt-auto">
+              {/* Seller Operations */}
+              {isOwner && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Listing Management</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    {!isSold ? (
+                      <button
+                        onClick={handleMarkAsSold}
+                        className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 px-4 rounded text-sm shadow transition duration-150"
+                      >
+                        Mark as Sold
+                      </button>
+                    ) : (
+                      <div className="bg-red-50 border border-red-200 text-red-700 font-bold py-2 px-4 rounded text-xs text-center flex items-center justify-center">
+                        ✓ Marked as Sold
+                      </div>
+                    )}
                     <button
-                      onClick={handleMarkAsSold}
-                      className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 px-4 rounded text-sm shadow transition duration-150"
+                      onClick={handleDeleteListing}
+                      className="border border-red-500 text-red-500 hover:bg-red-50 font-bold py-2.5 px-4 rounded text-sm transition duration-150"
                     >
-                      Mark as Sold
+                      Delete Listing
                     </button>
-                  ) : (
-                    <div className="bg-red-50 border border-red-200 text-red-700 font-bold py-2 px-4 rounded text-xs text-center flex items-center justify-center">
-                      ✓ Marked as Sold
-                    </div>
-                  )}
-                  <button
-                    onClick={handleDeleteListing}
-                    className="border border-red-500 text-red-500 hover:bg-red-50 font-bold py-2.5 px-4 rounded text-sm transition duration-150"
-                  >
-                    Delete Listing
-                  </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* Secure Hierarchical Mod UI Block */}
+              {isModerator && (
+                <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between border-b border-purple-200 pb-1.5">
+                    <p className="text-xs font-bold text-purple-800 uppercase tracking-wider flex items-center gap-1">
+                      🛡️ {getRoleTitle(userPerms)} Panel
+                    </p>
+                    <span className="text-[10px] bg-purple-200 text-purple-900 font-semibold px-2 py-0.5 rounded">
+                      Target: {getRoleTitle(sellerPerms)}
+                    </span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={handleModToggleHide}
+                      className="bg-purple-700 hover:bg-purple-800 text-white font-bold py-2 px-3 rounded text-xs transition duration-150 shadow-sm"
+                    >
+                      {isHidden ? "👁️ Unhide Listing" : "👁️‍🗨️ Hide Listing"}
+                    </button>
+                    <button
+                      onClick={handleModForceDelete}
+                      className="bg-white hover:bg-red-50 text-red-700 border border-red-300 font-bold py-2 px-3 rounded text-xs transition duration-150"
+                    >
+                      💥 Force Delete
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
           </div>
         </div>
