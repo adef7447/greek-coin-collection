@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../../../lib/supabase";
-
+// 1. Added the clean relative import to your badge component
+import UserBadge from "@/app/src/components/UserBadge";
+// 2. Removed the rogue "npm.cmd run dev" command from this line
 export default function ListingDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -16,20 +18,30 @@ export default function ListingDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [userPerms, setUserPerms] = useState<number>(0);
 
   async function fetchListingDetails() {
     if (!listingId || !coinId) return;
 
-    // 1. Get current logged in user
+    // 1. Get current logged in user and their permission level
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
       setCurrentUserId(user.id);
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("perms")
+        .eq("id", user.id)
+        .single();
+      setUserPerms(profile?.perms || 1);
     }
 
-    // 2. Fetch listing details from public.coin_listings
+    // 2. Fetch listing details and join the seller's profile
     const { data: listingData, error: listingErr } = await supabase
       .from("coin_listings")
-      .select("*")
+      .select(`
+        *,
+        seller_profile:profiles(username, perms)
+      `)
       .eq("id", listingId)
       .single();
 
@@ -120,6 +132,7 @@ export default function ListingDetailsPage() {
   const allImages = [listing.image_1, listing.image_2, listing.image_3, listing.image_4].filter(Boolean);
   const isOwner = currentUserId === listing.seller_id;
   const isSold = listing.status === "sold";
+  const sellerPerms = listing.seller_profile?.perms || 1;
 
   return (
     <main className="min-h-screen p-8 bg-blue-50 text-black">
@@ -253,6 +266,17 @@ export default function ListingDetailsPage() {
                   </p>
                 </div>
               )}
+
+              {/* Seller Information (Username + Visual Badges) */}
+              <div className="border-t pt-4">
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Seller</h3>
+                <div className="flex items-center gap-2 bg-gray-50 p-3 rounded border">
+                  <span className="font-bold text-gray-900">
+                    {listing.seller_profile?.username || "Collector"}
+                  </span>
+                  <UserBadge perms={sellerPerms} />
+                </div>
+              </div>
 
               {/* Contact Information */}
               <div className="border-t pt-4 space-y-3">

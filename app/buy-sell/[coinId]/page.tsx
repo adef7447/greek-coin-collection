@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import UserBadge from "@/app/src/components/UserBadge";
 
 export default function CoinTradePortal() {
   const params = useParams();
@@ -42,10 +43,13 @@ export default function CoinTradePortal() {
       setCoin(coinData);
     }
 
-    // 3. Get All Listings for this Coin (both active and sold)
+    // 3. Get All Listings for this Coin (both active and sold) with Seller Perms Join
     const { data: listingsData, error: listingsError } = await supabase
       .from("coin_listings")
-      .select("*")
+      .select(`
+        *,
+        seller_profile:profiles(perms)
+      `)
       .eq("coin_id", coinId)
       .order("created_at", { ascending: false });
 
@@ -181,18 +185,24 @@ export default function CoinTradePortal() {
             <div className="flex flex-col space-y-3">
               {listings.map((listing) => {
                 const isSold = listing.status === "sold";
+                const sellerPerms = listing.seller_profile?.perms || 1;
+                
                 return (
-                  <Link
-                    key={listing.id}
-                    href={`/buy-sell/${coinId}/listing/${listing.id}`}
-                    className={`font-bold text-lg hover:underline transition truncate block ${
-                      isSold 
-                        ? "text-red-600 hover:text-red-800" 
-                        : "text-green-600 hover:text-green-800"
-                    }`}
-                  >
-                    {generateListingSentence(listing)} {isSold && "• [SOLD]"}
-                  </Link>
+                  <div key={listing.id} className="flex items-center gap-2">
+                    <Link
+                      href={`/buy-sell/${coinId}/listing/${listing.id}`}
+                      className={`font-bold text-lg hover:underline transition truncate ${
+                        isSold 
+                          ? "text-red-600 hover:text-red-800" 
+                          : "text-green-600 hover:text-green-800"
+                      }`}
+                    >
+                      {generateListingSentence(listing)} {isSold && "• [SOLD]"}
+                    </Link>
+                    
+                    {/* Inline badges logic rendering only matching checkmark icons */}
+                    <UserBadge perms={sellerPerms} showTitle={false} />
+                  </div>
                 );
               })}
             </div>
