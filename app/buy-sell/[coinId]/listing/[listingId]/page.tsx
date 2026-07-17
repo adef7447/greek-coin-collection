@@ -20,20 +20,35 @@ export default function ListingDetailsPage() {
   const [userPerms, setUserPerms] = useState<number>(0);
 
   async function fetchListingDetails() {
-    if (!listingId || !coinId) return;
+    // If Next.js parameters aren't ready yet, turn off loading safely so it doesn't freeze
+    if (!listingId || !coinId) {
+      console.warn("Parameters not available yet:", { listingId, coinId });
+      setLoading(false);
+      return;
+    }
 
     try {
       // 1. Get current logged-in user safely first
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        setCurrentUserId(user.id);
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("perms")
-          .eq("id", user.id)
-          .maybeSingle(); // Prevents throwing an error if record isn't fully ready
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      
+      if (authErr) {
+        console.warn("Auth check skipped or user unauthenticated:", authErr.message);
+      }
+
+      if (authData?.user) {
+        setCurrentUserId(authData.user.id);
         
-        setUserPerms(profile?.perms || 1);
+        try {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("perms")
+            .eq("id", authData.user.id)
+            .maybeSingle();
+          
+          setUserPerms(profile?.perms || 1);
+        } catch (profileErr) {
+          console.error("Failed to query profile permissions safely:", profileErr);
+        }
       }
 
       // 2. Fetch listing details and join the seller's profile
@@ -44,31 +59,36 @@ export default function ListingDetailsPage() {
           seller_profile:profiles(username, perms)
         `)
         .eq("id", listingId)
-        .maybeSingle(); // Using maybeSingle avoids hard crashes if listingId is slightly formatted differently
+        .maybeSingle();
 
       if (listingErr) {
-        console.error("Error fetching listing details:", listingErr.message);
+        console.error("Database error fetching listing details:", listingErr.message);
       } else if (listingData) {
         setListing(listingData);
         const images = [listingData.image_1, listingData.image_2, listingData.image_3, listingData.image_4].filter(Boolean);
         if (images.length > 0) {
           setActiveImage(images[0]);
         }
+      } else {
+        console.warn("No record found inside coin_listings table for ID:", listingId);
       }
 
       // 3. Fetch parent coin metadata
-      const { data: coinData } = await supabase
+      const { data: coinData, error: coinErr } = await supabase
         .from("coins")
         .select("name, year")
         .eq("id", coinId)
         .maybeSingle();
 
-      if (coinData) {
+      if (coinErr) {
+        console.error("Database error fetching coin metadata:", coinErr.message);
+      } else if (coinData) {
         setCoin(coinData);
       }
     } catch (err) {
-      console.error("Unexpected error loading data:", err);
+      console.error("Unexpected hard crash loading component data:", err);
     } finally {
+      // Guaranteed execution step to tear down loading screens
       setLoading(false);
     }
   }
