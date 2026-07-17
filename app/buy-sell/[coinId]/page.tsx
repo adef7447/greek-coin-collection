@@ -42,7 +42,7 @@ export default function CoinTradePortal() {
       setCoin(coinData);
     }
 
-    // 3. Get Active Listings for this Coin
+    // 3. Get All Listings for this Coin (both active and sold)
     const { data: listingsData, error: listingsError } = await supabase
       .from("coin_listings")
       .select("*")
@@ -178,17 +178,23 @@ export default function CoinTradePortal() {
               <p className="text-sm text-gray-400 mt-1">Check back later or list yours if you have permission!</p>
             </div>
           ) : (
-            // Flex column layout guarantees one listing title per line, one line per title
             <div className="flex flex-col space-y-3">
-              {listings.map((listing) => (
-                <Link
-                  key={listing.id}
-                  href={`/buy-sell/${coinId}/listing/${listing.id}`}
-                  className="text-green-600 hover:text-green-800 font-bold text-lg hover:underline transition truncate block"
-                >
-                  {generateListingSentence(listing)}
-                </Link>
-              ))}
+              {listings.map((listing) => {
+                const isSold = listing.status === "sold";
+                return (
+                  <Link
+                    key={listing.id}
+                    href={`/buy-sell/${coinId}/listing/${listing.id}`}
+                    className={`font-bold text-lg hover:underline transition truncate block ${
+                      isSold 
+                        ? "text-red-600 hover:text-red-800" 
+                        : "text-green-600 hover:text-green-800"
+                    }`}
+                  >
+                    {generateListingSentence(listing)} {isSold && "• [SOLD]"}
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>
