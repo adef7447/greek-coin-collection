@@ -9,8 +9,10 @@ import UserBadge from "@/app/src/components/UserBadge";
 export default function ListingDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  
   const coinId = params.coinId;
-  const listingId = params.id;
+  // Fallback chain: attempts to find the identifier regardless of folder naming choice
+  const listingId = params.id || params.listingId || params.slug;
 
   const [coin, setCoin] = useState<any>(null);
   const [listing, setListing] = useState<any>(null);
@@ -18,8 +20,6 @@ export default function ListingDetailsPage() {
   const [activeImage, setActiveImage] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userPerms, setUserPerms] = useState<number>(0);
-  
-  // New state to surface errors directly onto your UI screen
   const [debugError, setDebugError] = useState<string | null>(null);
 
   async function fetchListingDetails() {
@@ -75,7 +75,7 @@ export default function ListingDetailsPage() {
           setActiveImage(images[0]);
         }
       } else {
-        setDebugError("No matching row found in [coin_listings] table for this ID. It may be missing or blocked by Row-Level Security (RLS).");
+        setDebugError(`No matching row found in [coin_listings] for ID value "${listingId}". Check if this row index exists in Supabase.`);
       }
 
       // 3. Fetch parent coin metadata
@@ -151,13 +151,14 @@ export default function ListingDetailsPage() {
       <main className="min-h-screen p-8 bg-blue-50 text-black text-center flex flex-col items-center justify-center">
         <div className="bg-white p-8 rounded-xl shadow-md border border-gray-200 max-w-lg w-full">
           <h1 className="text-2xl font-bold text-red-600">Listing Not Found</h1>
-          <p className="mt-2 text-gray-600 text-sm">The listing might have been removed, or your route parameter keys don't match your database structure.</p>
+          <p className="mt-2 text-gray-600 text-sm">Your route parameter keys don't match your structural layout setup.</p>
           
           {/* Diagnostic Box */}
           <div className="mt-6 p-4 bg-gray-50 rounded-lg text-left border border-gray-200 text-xs font-mono space-y-1.5 text-gray-700">
-            <p className="font-bold text-gray-900 border-b pb-1 mb-2 font-sans text-sm">🔍 Live Debug Info:</p>
+            <p className="font-bold text-gray-900 border-b pb-1 mb-2 font-sans text-sm">🔍 Dynamic Route Check:</p>
+            <p><strong>All Route Params:</strong> {JSON.stringify(params)}</p>
             <p><strong>URL Param [coinId]:</strong> {coinId ? String(coinId) : "undefined"}</p>
-            <p><strong>URL Param [id]:</strong> {listingId ? String(listingId) : "undefined"}</p>
+            <p><strong>Resolved [listingId]:</strong> {listingId ? String(listingId) : "undefined"}</p>
             <p className="text-red-700 pt-1"><strong>Status/Error:</strong> {debugError || "No active error caught."}</p>
           </div>
 
