@@ -18,7 +18,7 @@ export default function ListingDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [userPerms, setUserPerms] = useState<number>(0);
+  const [userPerms, setUserPerms] = useState<number>(1); // Default to 1 (member)
   const [debugError, setDebugError] = useState<string | null>(null);
 
   async function fetchListingDetails() {
@@ -54,7 +54,7 @@ export default function ListingDetailsPage() {
         }
       }
 
-      // 2. Fetch listing details standalone (Removes the crashing join syntax)
+      // 2. Fetch listing details standalone
       const { data: listingData, error: listingErr } = await supabase
         .from("coin_listings")
         .select("*")
@@ -66,11 +66,11 @@ export default function ListingDetailsPage() {
         setDebugError(`Table [coin_listings] Error: ${listingErr.message}`);
       } else if (listingData) {
         
-        // 3. Fetch seller profile separately to prevent strict column/relationship failures
+        // 3. Fetch seller profile separately
         try {
           const { data: profileData } = await supabase
             .from("profiles")
-            .select("*") // select * avoids SQL syntax crashes if 'username' column is missing
+            .select("*")
             .eq("id", listingData.seller_id)
             .maybeSingle();
 
@@ -110,7 +110,7 @@ export default function ListingDetailsPage() {
       console.error("Unexpected hard crash loading component data:", err);
       setDebugError(`Runtime Catch Error: ${err?.message || err}`);
     } finally {
-      setLoading(false);
+      loading && setLoading(false);
     }
   }
 
@@ -190,6 +190,17 @@ export default function ListingDetailsPage() {
   const isOwner = currentUserId === listing.seller_id;
   const isSold = listing.status === "sold";
   const sellerPerms = listing.seller_profile?.perms || 1;
+
+  // Hierarchical permission evaluation logic for moderation deletions
+  const canDeleteListing = (() => {
+    if (isOwner) return true;
+    if (userPerms >= 1000) return true; // Owner role bypasses all restrictions
+    if (userPerms >= 200 && sellerPerms < 200) return true; // Admin removes lower
+    if (userPerms >= 150 && sellerPerms < 150) return true; // Senior Mod removes lower
+    if (userPerms >= 110 && sellerPerms <= 50) return true; // Mod removes Verified Seller and below
+    if (userPerms >= 100 && sellerPerms <= 40) return true; // Assistant Mod removes Official Seller and below
+    return false;
+  })();
 
   return (
     <main className="min-h-screen p-8 bg-blue-50 text-black">
@@ -356,28 +367,37 @@ export default function ListingDetailsPage() {
               </div>
             </div>
 
-            {/* Seller Action Control Panel */}
-            {isOwner && (
+            {/* Management & Moderation Control Panel */}
+            {(isOwner || canDeleteListing) && (
               <div className="border-t pt-6 mt-auto space-y-3">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Listing Management</p>
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                  {isOwner ? "Listing Management" : "Moderation Actions"}
+                </p>
                 <div className="grid grid-cols-2 gap-4">
-                  {!isSold ? (
-                    <button
-                      onClick={handleMarkAsSold}
-                      className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 px-4 rounded text-sm shadow transition duration-150"
-                    >
-                      Mark as Sold
-                    </button>
-                  ) : (
-                    <div className="bg-red-50 border border-red-200 text-red-700 font-bold py-2 px-4 rounded text-xs text-center flex items-center justify-center">
-                      ✓ Marked as Sold
-                    </div>
+                  {isOwner && (
+                    <>
+                      {!isSold ? (
+                        <button
+                          onClick={handleMarkAsSold}
+                          className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2.5 px-4 rounded text-sm shadow transition duration-150"
+                        >
+                          Mark as Sold
+                        </button>
+                      ) : (
+                        <div className="bg-red-50 border border-red-200 text-red-700 font-bold py-2 px-4 rounded text-xs text-center flex items-center justify-center">
+                          ✓ Marked as Sold
+                        </div>
+                      )}
+                    </>
                   )}
+                  
                   <button
                     onClick={handleDeleteListing}
-                    className="border border-red-500 text-red-500 hover:bg-red-50 font-bold py-2.5 px-4 rounded text-sm transition duration-150"
+                    className={`border border-red-500 text-red-500 hover:bg-red-50 font-bold py-2.5 px-4 rounded text-sm transition duration-150 ${
+                      !isOwner ? "col-span-2" : ""
+                    }`}
                   >
-                    Delete Listing
+                    Delete Listing {!isOwner && "(As Moderator)"}
                   </button>
                 </div>
               </div>
