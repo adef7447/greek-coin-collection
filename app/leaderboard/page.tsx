@@ -98,7 +98,7 @@ export default function Leaderboard() {
     return false;
   }
 
-  // Mutation handler action
+  // Mutation handler action invoking backend RPC database security function
   async function handleRankChange(targetUserId: string, targetPermValue: number, actionType: "promote" | "demote") {
     try {
       setActionLoadingId(targetUserId);
@@ -122,7 +122,7 @@ export default function Leaderboard() {
       const targetPlayer = players.find(p => p.id === targetUserId);
       if (!targetPlayer) return;
 
-      // Verify clearance against fresh, authoritative database value
+      // Verify clearance against fresh, authoritative database value before hitting the server
       const isAllowed = actionType === "promote"
         ? checkCanPromote(freshModPerms, targetPlayer.perms || 0)
         : checkCanDemote(freshModPerms, targetPlayer.perms || 0);
@@ -132,20 +132,22 @@ export default function Leaderboard() {
         return;
       }
 
-      // Execute update securely
-      const { error } = await supabase
-        .from("profiles")
-        .update({ perms: targetPermValue })
-        .eq("id", targetUserId);
+      // Execute update securely via RPC stored function route
+      const { error } = await supabase.rpc("update_user_rank", {
+        target_user_id: targetUserId,
+        target_perm: targetPermValue,
+        action_type: actionType
+      });
 
       if (error) {
         alert(`Database execution rejection: ${error.message}`);
       } else {
-        // Synchronize local component view state
+        // Synchronize local component view state immediately
         await getLeaderboardAndUser();
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(`Execution Error: ${err?.message || err}`);
     } finally {
       setActionLoadingId(null);
     }
