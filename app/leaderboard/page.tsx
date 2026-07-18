@@ -5,10 +5,14 @@ import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 import UserBadge from "@/app/src/components/UserBadge";
 
+// Linear permission rank mapping
+const PERM_RANKS = [0, 1, 10, 20, 30, 40, 50, 100, 110, 150, 200, 1000];
+
 export default function Leaderboard() {
   const [players, setPlayers] = useState<any[]>([]);
   const [currentUserPerms, setCurrentUserPerms] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   async function getLeaderboardAndUser() {
     try {
@@ -52,6 +56,171 @@ export default function Leaderboard() {
   // Filter out the verified members list (Perm 30 and above)
   const verifiedPlayers = players.filter((player) => (player.perms || 0) >= 30);
 
+  // Helper calculation definitions for promotion/demotion steps
+  function getPromoteTarget(currentPerms: number) {
+    const idx = PERM_RANKS.indexOf(currentPerms);
+    if (idx !== -1 && idx < PERM_RANKS.length - 1) {
+      return PERM_RANKS[idx + 1];
+    }
+    return null;
+  }
+
+  function getDemoteTarget(currentPerms: number) {
+    const idx = PERM_RANKS.indexOf(currentPerms);
+    if (idx !== -1 && idx > 0) {
+      return PERM_RANKS[idx - 1];
+    }
+    return null;
+  }
+
+  // Hierarchy validation logic rules mapping
+  function checkCanPromote(modPerms: number, playerPerms: number): boolean {
+    const target = getPromoteTarget(playerPerms);
+    if (target === null) return false;
+
+    if (modPerms >= 1000) return playerPerms < 200; // Owner promotes up to Admin
+    if (modPerms >= 200) return playerPerms < 100;  // Admin promotes up to Assistant Mod
+    if (modPerms >= 150) return playerPerms < 50;   // Senior Mod promotes up to Verified Seller
+    if (modPerms >= 110) return playerPerms < 40;   // Mod promotes up to Official Seller
+    if (modPerms >= 100) return playerPerms < 30;   // Assistant Mod promotes up to Verified Member
+    return false;
+  }
+
+  function checkCanDemote(modPerms: number, playerPerms: number): boolean {
+    const target = getDemoteTarget(playerPerms);
+    if (target === null) return false;
+
+    if (modPerms >= 1000) return playerPerms < 1000;
+    if (modPerms >= 200) return playerPerms < 200;
+    if (modPerms >= 150) return playerPerms < 150;
+    if (modPerms >= 110) return playerPerms < 110;
+    if (modPerms >= 100) return playerPerms <= 30;  // Assistant Mod demotes Verified Member and below
+    return false;
+  }
+
+  // Mutation handler action
+  async function handleRankChange(targetUserId: string, targetPermValue: number, actionType: "promote" | "demote") {
+    try {
+      setActionLoadingId(targetUserId);
+
+      // Secure Runtime Check: Re-fetch authenticated user profile status directly from source
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert("Session unauthenticated or expired.");
+        return;
+      }
+
+      const { data: verifiedProfile } = await supabase
+        .from("profiles")
+        .select("perms")
+        .eq("id", user.id)
+        .single();
+
+      const freshModPerms = verifiedProfile?.perms || 1;
+
+      // Find target baseline
+      const targetPlayer = players.find(p => p.id === targetUserId);
+      if (!targetPlayer) return;
+
+      // Verify clearance against fresh, authoritative database value
+      const isAllowed = actionType === "promote"
+        ? checkCanPromote(freshModPerms, targetPlayer.perms || 0)
+        : checkCanDemote(freshModPerms, targetPlayer.perms || 0);
+
+      if (!isAllowed) {
+        alert("Security Error: Action denied. Your current rank does not possess clearance for this operation.");
+        return;
+      }
+
+      // Execute update securely
+      const { error } = await supabase
+        .from("profiles")
+        .update({ perms: targetPermValue })
+        .eq("id", targetUserId);
+
+      if (error) {
+        alert(`Database execution rejection: ${error.message}`);
+      } else {
+        // Synchronize local component view state
+        await getLeaderboardAndUser();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  // Common rendering template helper for matching rows cleanly
+  const renderRow = (player: any, index: number, scopeKey: string) => {
+    const pPerms = player.perms || 0;
+    const nextRank = getPromoteTarget(pPerms);
+    const prevRank = getDemoteTarget(pPerms);
+
+    const showPromote = checkCanPromote(currentUserPerms, pPerms) && nextRank !== null;
+    const showDemote = checkCanDemote(currentUserPerms, pPerms) && prevRank !== null;
+
+    return (
+      <div
+        key={`${scopeKey}-${player.id || index}`}
+        className="flex flex-col md:flex-row md:items-center justify-between border-b last:border-b-0 py-3.5 gap-3 text-lg"
+      >
+        {/* Left Side: Standing and Username */}
+        <div className="flex items-center flex-1 min-w-0">
+          <div className="w-12 font-bold text-gray-700 text-center md:text-left shrink-0">
+            {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`}
+          </div>
+
+          <div className="flex items-center gap-2.5 text-left px-2 font-medium truncate">
+            {canViewOtherBinders ? (
+              <Link
+                href={`/my-coins?userId=${player.id}`}
+                className="text-blue-600 hover:text-blue-800 hover:underline transition truncate"
+              >
+                {player.display_name || "Anonymous Collector"}
+              </Link>
+            ) : (
+              <span className="text-gray-900 truncate">{player.display_name || "Anonymous Collector"}</span>
+            )}
+            <UserBadge perms={pPerms} />
+          </div>
+        </div>
+
+        {/* Right Side: Mod Controls & Score */}
+        <div className="flex items-center justify-between md:justify-end gap-6 shrink-0 pl-12 md:pl-0">
+          {/* Rank Modification Action Buttons */}
+          {(showPromote || showDemote) && (
+            <div className="flex items-center gap-1.5 bg-gray-50 p-1 rounded-lg border border-gray-100">
+              {showPromote && (
+                <button
+                  disabled={actionLoadingId !== null}
+                  onClick={() => handleRankChange(player.id, nextRank!, "promote")}
+                  className="px-2.5 py-1 text-xs font-bold rounded bg-green-50 text-green-700 border border-green-200 hover:bg-green-100 disabled:opacity-50 transition"
+                >
+                  Promote
+                </button>
+              )}
+              {showDemote && (
+                <button
+                  disabled={actionLoadingId !== null}
+                  onClick={() => handleRankChange(player.id, prevRank!, "demote")}
+                  className="px-2.5 py-1 text-xs font-bold rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-50 transition"
+                >
+                  Demote
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* User Score Standings */}
+          <div className="font-black text-gray-900 tabular-nums text-right min-w-[70px]">
+            {player.score ? player.score.toLocaleString() : "0"}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-blue-50 text-black">
@@ -66,7 +235,7 @@ export default function Leaderboard() {
       <div className="max-w-4xl mx-auto flex justify-between items-center">
         <div>
           <h1 className="text-4xl font-bold tracking-tight text-gray-900">Leaderboard</h1>
-          <p className="text-sm text-gray-500 mt-1">Collector tier ranks and performance metrics</p>
+          <p className="text-sm text-gray-500 mt-1">Collector tier ranks and administrative moderation logs</p>
         </div>
 
         <Link
@@ -96,37 +265,7 @@ export default function Leaderboard() {
                 No verified members recorded yet.
               </p>
             ) : (
-              verifiedPlayers.map((player, index) => (
-                <div
-                  key={`verified-${player.id || index}`}
-                  className="flex justify-between items-center border-b last:border-b-0 py-3.5 text-lg"
-                >
-                  {/* Position Medal / Number */}
-                  <div className="w-12 font-bold text-gray-700 text-center md:text-left">
-                    {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`}
-                  </div>
-
-                  {/* Identity Column + Badges */}
-                  <div className="flex-1 flex items-center gap-2.5 text-left px-4 font-medium">
-                    {canViewOtherBinders ? (
-                      <Link
-                        href={`/my-coins?userId=${player.id}`}
-                        className="text-blue-600 hover:text-blue-800 hover:underline transition"
-                      >
-                        {player.display_name || "Anonymous Collector"}
-                      </Link>
-                    ) : (
-                      <span className="text-gray-900">{player.display_name || "Anonymous Collector"}</span>
-                    )}
-                    <UserBadge perms={player.perms || 1} />
-                  </div>
-
-                  {/* Score */}
-                  <div className="font-black text-gray-900 tabular-nums">
-                    {player.score ? player.score.toLocaleString() : "0"}
-                  </div>
-                </div>
-              ))
+              verifiedPlayers.map((player, index) => renderRow(player, index, "verified"))
             )}
           </div>
         </section>
@@ -143,37 +282,7 @@ export default function Leaderboard() {
                 No registered collectors found.
               </p>
             ) : (
-              players.map((player, index) => (
-                <div
-                  key={`global-${player.id || index}`}
-                  className="flex justify-between items-center border-b last:border-b-0 py-3.5 text-lg"
-                >
-                  {/* Position Medal / Number */}
-                  <div className="w-12 font-bold text-gray-700 text-center md:text-left">
-                    {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`}
-                  </div>
-
-                  {/* Identity Column + Badges */}
-                  <div className="flex-1 flex items-center gap-2.5 text-left px-4 font-medium">
-                    {canViewOtherBinders ? (
-                      <Link
-                        href={`/my-coins?userId=${player.id}`}
-                        className="text-blue-600 hover:text-blue-800 hover:underline transition"
-                      >
-                        {player.display_name || "Anonymous Collector"}
-                      </Link>
-                    ) : (
-                      <span className="text-gray-900">{player.display_name || "Anonymous Collector"}</span>
-                    )}
-                    <UserBadge perms={player.perms || 1} />
-                  </div>
-
-                  {/* Score */}
-                  <div className="font-black text-gray-900 tabular-nums">
-                    {player.score ? player.score.toLocaleString() : "0"}
-                  </div>
-                </div>
-              ))
+              players.map((player, index) => renderRow(player, index, "global"))
             )}
           </div>
         </section>
