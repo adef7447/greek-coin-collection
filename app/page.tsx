@@ -10,7 +10,7 @@ import { checkAchievements } from "../lib/checkAchievements";
 const ERA_RANGES = [
   { label: "1828-1831", min: 1828, max: 1831 },
   { label: "1832-1845", min: 1832, max: 1845 },
-  { label: "1845-1857", min: 1845, max: 1857 },
+  { label: "1846-1857", min: 1846, max: 1857 },
   { label: "1868-1884", min: 1868, max: 1884 },
   { label: "1893-1922", min: 1893, max: 1922 },
   { label: "1926-1940", min: 1926, max: 1940 },
@@ -242,26 +242,31 @@ export default function Home() {
         </button>
       </div>
 
-      {/* Navigation Matrix Links */}
-      <div className="flex gap-4 mb-8 bg-white p-4 rounded shadow border">
-        <Link href="/my-coins" className="text-blue-600 font-semibold underline hover:text-blue-800">
-          My Coins
-        </Link>
-        <Link href="/leaderboard" className="text-blue-600 font-semibold underline hover:text-blue-800">
-          Leaderboard
-        </Link>
-        <Link href="/achievements" className="text-blue-600 font-semibold underline hover:text-blue-800">
-          Achievements
-        </Link>
-        <Link href="/recommendations" className="text-green-600 font-semibold underline hover:text-green-800">
-          Recommendations ★
-        </Link>
-        <Link href="/info" className="text-blue-600 font-semibold underline hover:text-blue-800">
-          Info Page
-        </Link>
-        <Link href="/buy-sell" className="text-blue-600 font-semibold underline hover:text-blue-800">
-  Buy/Sell
-</Link>
+      {/* Navigation Matrix Links - Split into responsive rows */}
+      <div className="flex flex-col gap-3 mb-8 bg-white p-4 rounded shadow border">
+        <div className="flex flex-wrap gap-4">
+          <Link href="/my-coins" className="text-blue-600 font-semibold underline hover:text-blue-800">
+            My Coins
+          </Link>
+          <Link href="/leaderboard" className="text-blue-600 font-semibold underline hover:text-blue-800">
+            Leaderboard
+          </Link>
+          <Link href="/achievements" className="text-blue-600 font-semibold underline hover:text-blue-800">
+            Achievements
+          </Link>
+        </div>
+
+        <div className="flex flex-wrap gap-4 pt-1 border-t border-gray-100">
+          <Link href="/recommendations" className="text-green-600 font-semibold underline hover:text-green-800">
+            Recommendations ★
+          </Link>
+          <Link href="/info" className="text-blue-600 font-semibold underline hover:text-blue-800">
+            Info Page
+          </Link>
+          <Link href="/buy-sell" className="text-blue-600 font-semibold underline hover:text-blue-800">
+            Buy/Sell
+          </Link>
+        </div>
       </div>
 
       {/* TOP CATEGORY FILTERS */}

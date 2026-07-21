@@ -45,10 +45,10 @@ export default function InfoPage() {
             8. You can upload that as your image.
           </p>
           <p>
-            9. 
+            9. For more info and a fun coin community join our discord https://discord.gg/GxA8eyWkuF
           </p>
           <p>
-            10. 
+            10. Have fun collecting
           </p>
         </div>
       </div>
