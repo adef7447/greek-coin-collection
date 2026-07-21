@@ -169,7 +169,7 @@ export default function Home() {
 
       setUserDisplayName(profile?.display_name || "");
       setUserScore(profile?.score || 0);
-      setUserPerms(profile?.perms || 1);
+      setUserPerms(profile?.perms || 20);
       setLoading(false);
     }
 
