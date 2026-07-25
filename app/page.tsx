@@ -267,6 +267,12 @@ export default function Home() {
             Buy/Sell
           </Link>
         </div>
+        <Link
+  href="/grading"
+  className="text-blue-600 font-semibold underline hover:text-blue-800"
+>
+  Grading Assistant →
+</Link>
       </div>
 
       {/* TOP CATEGORY FILTERS */}
