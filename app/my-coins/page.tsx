@@ -19,15 +19,15 @@ const CONDITION_MAP: { [key: number]: string } = {
   10: "LU (Low Uncirculated)",
   11: "MU (Middle Uncirculated)",
   12: "BU (Brilliant Uncirculated)",
-  13: "HU (High Uncirculated)"
+  13: "HU (High Uncirculated)",
 };
 
 // Helper function to decode the 5-digit damage signature (e.g., 10201)
 function decodeDamageSignature(signature: number | string | null): string {
   if (signature === null || signature === undefined) return "None";
-  
+
   const sigStr = String(signature).padStart(5, "0");
-  
+
   const damagedVal = Number(sigStr[0]);
   const bentVal = Number(sigStr[1]);
   const cleanedVal = Number(sigStr[2]);
@@ -54,11 +54,23 @@ function decodeDamageSignature(signature: number | string | null): string {
   return activeDamages.length > 0 ? activeDamages.join(", ") : "None";
 }
 
+// Calculate score based on coin rarity
+function getScoreFromRarity(rarity: number) {
+  if (rarity >= 70) return 100000; // Unique
+  if (rarity >= 60) return 5000;   // Mythic
+  if (rarity >= 50) return 500;    // Legendary
+  if (rarity >= 40) return 100;    // Epic
+  if (rarity >= 30) return 30;     // Rare
+  if (rarity >= 20) return 10;     // Uncommon
+  if (rarity >= 10) return 3;      // Common
+  return 1;                        // Basic
+}
+
 // Inner component that handles user interaction and uses search params safely
 function MyCoinsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   // Extract target userId from URL query parameter if present
   const targetUserId = searchParams.get("userId");
 
@@ -66,7 +78,7 @@ function MyCoinsContent() {
   const [userCoins, setUserCoins] = useState<any[]>([]);
   const [binderOwnerName, setBinderOwnerName] = useState("");
   const [isReadOnly, setIsReadOnly] = useState(false);
-  
+
   // Track save status per card
   const [saveStatus, setSaveStatus] = useState<{ [userCoinId: number]: "Idle" | "Saving..." | "Saved!" }>({});
 
@@ -86,8 +98,6 @@ function MyCoinsContent() {
       return;
     }
 
-    // Determine whose binder we are looking at. 
-    // If targetUserId is missing or equals the current user's ID, it's their own binder.
     const activeUserId = targetUserId && targetUserId !== user.id ? targetUserId : user.id;
     const readOnlyMode = activeUserId !== user.id;
     setIsReadOnly(readOnlyMode);
@@ -101,6 +111,7 @@ function MyCoinsContent() {
 
     setBinderOwnerName(profile?.display_name || "Collector");
 
+    // Included 'rarity' in the query so score deduction can be calculated
     const { data, error } = await supabase
       .from("user_coins")
       .select(`
@@ -117,7 +128,8 @@ function MyCoinsContent() {
           denomination,
           metal,
           obverse_url,
-          reverse_url
+          reverse_url,
+          rarity
         )
       `)
       .eq("user_id", activeUserId);
@@ -125,13 +137,11 @@ function MyCoinsContent() {
     if (error) {
       console.error("Error fetching user coins:", error);
     } else if (data) {
-      // 1. Normalize relation payloads
       const normalizedData = data.map((item: any) => ({
         ...item,
         coins: Array.isArray(item.coins) ? item.coins[0] : item.coins,
       }));
 
-      // 2. Apply sorting: Year (desc), Denomination (asc), Coin ID (asc)
       normalizedData.sort((a, b) => {
         const coinA = a.coins;
         const coinB = b.coins;
@@ -150,8 +160,7 @@ function MyCoinsContent() {
       });
 
       setUserCoins(normalizedData);
-      
-      // Initialize editing states from DB values
+
       const initialStates: typeof editStates = {};
       const initialStatus: typeof saveStatus = {};
       normalizedData.forEach((item) => {
@@ -170,15 +179,15 @@ function MyCoinsContent() {
 
   // Auto-save logic
   const triggerAutoSave = (userCoinId: number, field: string, value: string) => {
-    if (isReadOnly) return; // Guard against unsaved execution if in read-only mode
+    if (isReadOnly) return;
 
     const key = `${userCoinId}-${field}`;
-    
+
     if (timeoutRefs.current[key]) {
       clearTimeout(timeoutRefs.current[key]);
     }
 
-    setSaveStatus(prev => ({ ...prev, [userCoinId]: "Saving..." }));
+    setSaveStatus((prev) => ({ ...prev, [userCoinId]: "Saving..." }));
 
     timeoutRefs.current[key] = setTimeout(async () => {
       const { error } = await supabase
@@ -188,14 +197,14 @@ function MyCoinsContent() {
 
       if (error) {
         console.error(`Auto-save failed for ${field}:`, error.message);
-        setSaveStatus(prev => ({ ...prev, [userCoinId]: "Idle" }));
+        setSaveStatus((prev) => ({ ...prev, [userCoinId]: "Idle" }));
       } else {
-        setSaveStatus(prev => ({ ...prev, [userCoinId]: "Saved!" }));
+        setSaveStatus((prev) => ({ ...prev, [userCoinId]: "Saved!" }));
         setTimeout(() => {
-          setSaveStatus(prev => ({ ...prev, [userCoinId]: "Idle" }));
+          setSaveStatus((prev) => ({ ...prev, [userCoinId]: "Idle" }));
         }, 2000);
       }
-    }, 1000); 
+    }, 1000);
   };
 
   const handleInputChange = (userCoinId: number, field: "image1" | "image2" | "notes", value: string) => {
@@ -218,6 +227,15 @@ function MyCoinsContent() {
     const confirmDelete = confirm("Are you sure you want to remove this coin from your collection?");
     if (!confirmDelete) return;
 
+    // 1. Locate coin details to determine its score value before deleting
+    const targetItem = userCoins.find((uc) => uc.id === userCoinId);
+    const coinRarity = targetItem?.coins?.rarity ?? 0;
+    const scoreToDeduct = getScoreFromRarity(coinRarity);
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // 2. Delete the user coin entry from the database
     const { error } = await supabase
       .from("user_coins")
       .delete()
@@ -225,10 +243,21 @@ function MyCoinsContent() {
 
     if (error) {
       alert("Failed to remove coin: " + error.message);
-    } else {
-      alert("Coin successfully removed.");
-      setUserCoins(prev => prev.filter(item => item.id !== userCoinId));
+      return;
     }
+
+    // 3. Deduct score by passing a negative integer to increment_score
+    const { error: scoreError } = await supabase.rpc("increment_score", {
+      user_id_input: user.id,
+      amount: -scoreToDeduct,
+    });
+
+    if (scoreError) {
+      console.error("Failed to deduct score:", scoreError);
+    }
+
+    alert("Coin successfully removed.");
+    setUserCoins((prev) => prev.filter((item) => item.id !== userCoinId));
   }
 
   useEffect(() => {
@@ -288,7 +317,7 @@ function MyCoinsContent() {
                   <div>
                     <div className="flex justify-between items-start">
                       <h2 className="text-2xl font-bold mb-2">{coin.name}</h2>
-                      
+
                       {!isReadOnly && saveStatus[uc.id] !== "Idle" && (
                         <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${
                           saveStatus[uc.id] === "Saving..." ? "bg-amber-100 text-amber-800" : "bg-green-100 text-green-800"
@@ -297,7 +326,7 @@ function MyCoinsContent() {
                         </span>
                       )}
                     </div>
-                    
+
                     <div className="space-y-2 mt-4 mb-4">
                       {hasCustomImage ? (
                         <>
@@ -348,7 +377,6 @@ function MyCoinsContent() {
                   </div>
 
                   <div>
-                    {/* Read-Only Notes Render Box (when not the owner) */}
                     {isReadOnly ? (
                       editStates[uc.id]?.notes && (
                         <div className="mt-4 p-2.5 bg-gray-50 rounded border text-xs text-gray-600">
@@ -356,11 +384,8 @@ function MyCoinsContent() {
                         </div>
                       )
                     ) : (
-                      /* Seamless Auto-saving Micro Inputs (Only rendered for the owner) */
                       <div className="mt-6 pt-4 border-t border-gray-100 mb-4">
                         <div className="flex flex-wrap gap-2 items-center justify-between">
-                          
-                          {/* Custom Image 1 */}
                           <div className="flex flex-col">
                             <span className="text-[10px] text-gray-500 font-bold mb-0.5">IMG 1 URL</span>
                             <input
@@ -372,7 +397,6 @@ function MyCoinsContent() {
                             />
                           </div>
 
-                          {/* Custom Image 2 */}
                           <div className="flex flex-col">
                             <span className="text-[10px] text-gray-500 font-bold mb-0.5">IMG 2 URL</span>
                             <input
@@ -384,7 +408,6 @@ function MyCoinsContent() {
                             />
                           </div>
 
-                          {/* Notes Section */}
                           <div className="flex flex-col">
                             <span className="text-[10px] text-gray-500 font-bold mb-0.5">Notes</span>
                             <input
@@ -395,12 +418,10 @@ function MyCoinsContent() {
                               className="border text-xs p-1.5 rounded bg-gray-50 w-16 focus:w-48 transition-all duration-300 ease-in-out outline-none focus:ring-1 focus:ring-blue-500"
                             />
                           </div>
-
                         </div>
                       </div>
                     )}
 
-                    {/* Remove Button (Only visible to the owner) */}
                     {!isReadOnly && (
                       <button
                         onClick={() => removeCoin(uc.id)}
@@ -410,7 +431,6 @@ function MyCoinsContent() {
                       </button>
                     )}
                   </div>
-
                 </div>
               );
             })}
@@ -421,7 +441,6 @@ function MyCoinsContent() {
   );
 }
 
-// Default export wraps the main logic in Suspense to resolve Next.js build prerendering errors
 export default function MyCoinsPage() {
   return (
     <Suspense
