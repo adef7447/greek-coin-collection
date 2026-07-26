@@ -91,6 +91,24 @@ export default function GradingPage() {
   const [damaged, setDamaged] = useState(false);
   const [altered, setAltered] = useState(false);
 
+  // Helper function to reset all form inputs to default
+  function resetForm() {
+    setIsDetailsGrade(false);
+    setNumericGrade(60);
+    setStrikeType("Normal");
+    setColorType("Normal/BN");
+    setDesignation("None");
+    setDetailsGrade("VF");
+    setCleaning("None");
+    setPolishing("None");
+    setEnvironmental("None");
+    setHoled(false);
+    setBent(false);
+    setExJewelry(false);
+    setDamaged(false);
+    setAltered(false);
+  }
+
   // Fetch logged-in user profile & grader_weight
   useEffect(() => {
     async function fetchUserProfile() {
@@ -117,6 +135,7 @@ export default function GradingPage() {
   async function fetchRandomPhoto() {
     setLoading(true);
     setSubmitSuccess(null);
+    resetForm();
 
     const { count, error: countError } = await supabase
       .from("coin_photos")
@@ -185,7 +204,6 @@ export default function GradingPage() {
         userConditionScore * userGraderWeight) /
       newTotalWeight;
 
-    // Object to accumulate updates
     const updates: Partial<CoinPhoto> = {
       condition_score: newConditionScore,
       total_grader_weight: newTotalWeight,
@@ -211,12 +229,10 @@ export default function GradingPage() {
       } else if (colorType === "RD") {
         updates.color_score = currentPhoto.color_score + 2 * userGraderWeight;
       } else {
-        // Normal/BN
         updates.color_score = currentPhoto.color_score - userGraderWeight;
       }
     } else {
       // 5. Details Grade Damages
-      // Cleaning
       if (cleaning === "None") {
         updates.cleaning = currentPhoto.cleaning - userGraderWeight;
       } else if (cleaning === "Cleaned") {
@@ -225,7 +241,6 @@ export default function GradingPage() {
         updates.cleaning = currentPhoto.cleaning + 2 * userGraderWeight;
       }
 
-      // Polishing
       if (polishing === "None") {
         updates.polishing = currentPhoto.polishing - userGraderWeight;
       } else if (polishing === "Polished") {
@@ -234,7 +249,6 @@ export default function GradingPage() {
         updates.polishing = currentPhoto.polishing + 2 * userGraderWeight;
       }
 
-      // Environmental Damage
       if (environmental === "None") {
         updates.environmental_damage =
           currentPhoto.environmental_damage - userGraderWeight;
@@ -246,7 +260,6 @@ export default function GradingPage() {
           currentPhoto.environmental_damage + 2 * userGraderWeight;
       }
 
-      // Checkboxes (holed, bent, damaged, altered)
       updates.holed =
         currentPhoto.holed + (holed ? userGraderWeight : -userGraderWeight);
       updates.bent =
@@ -258,7 +271,6 @@ export default function GradingPage() {
         currentPhoto.altered + (altered ? userGraderWeight : -userGraderWeight);
     }
 
-    // Save to Supabase
     const { error } = await supabase
       .from("coin_photos")
       .update(updates)
