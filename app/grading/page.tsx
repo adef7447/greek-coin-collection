@@ -9,25 +9,34 @@ const NUMERIC_GRADES = [
   61, 62, 63, 64, 65, 66, 67, 68, 69, 70,
 ];
 
-const STRIKE_OPTIONS = [
-  "Normal",
-  "Proof-like",
-  "Deep Mirror Proof-like",
-  "Proof",
-  "Proof Cameo",
-  "Deep Mirror Proof Cameo",
-];
+const DETAILS_GRADE_MAP: Record<string, number> = {
+  P: 1,
+  FR: 2,
+  AG: 3,
+  G: 4,
+  VG: 8,
+  F: 12,
+  VF: 20,
+  XF: 40,
+  AU: 50,
+  UNC: 60,
+};
 
+const STRIKE_MAP: Record<string, number> = {
+  Normal: 10,
+  "Proof-like": 20,
+  "Deep Mirror Proof-like": 30,
+  Proof: 50,
+  "Proof Cameo": 60,
+  "Deep Mirror Proof Cameo": 80,
+};
+
+const STRIKE_OPTIONS = Object.keys(STRIKE_MAP);
 const COLOR_OPTIONS = ["Normal/BN", "RB", "RD"];
-
 const DESIGNATION_OPTIONS = ["None", "+", "*", "+*"];
-
-const DETAILS_GRADES = ["P", "FR", "AG", "G", "VG", "F", "VF", "XF", "AU", "UNC"];
-
+const DETAILS_GRADES = Object.keys(DETAILS_GRADE_MAP);
 const CLEANING_OPTIONS = ["None", "Cleaned", "Harshly Cleaned"];
-
 const POLISHING_OPTIONS = ["None", "Polished", "Harshly Polished"];
-
 const ENVIRONMENTAL_OPTIONS = [
   "None",
   "Environmental Damage",
@@ -39,11 +48,26 @@ interface CoinPhoto {
   coin_id: number;
   obverse_url: string;
   reverse_url: string | null;
+  condition_score: number;
+  total_grader_weight: number;
+  beauty_score: number;
+  color_score: number;
+  proof_score: number;
+  cleaning: number;
+  polishing: number;
+  environmental_damage: number;
+  holed: number;
+  bent: number;
+  damaged: number;
+  altered: number;
 }
 
 export default function GradingPage() {
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
   const [currentPhoto, setCurrentPhoto] = useState<CoinPhoto | null>(null);
+  const [userGraderWeight, setUserGraderWeight] = useState<number>(1);
 
   // Grade mode state
   const [isDetailsGrade, setIsDetailsGrade] = useState(false);
@@ -67,11 +91,33 @@ export default function GradingPage() {
   const [damaged, setDamaged] = useState(false);
   const [altered, setAltered] = useState(false);
 
-  // Fetch a random photo entry from the coin_photos table
+  // Fetch logged-in user profile & grader_weight
+  useEffect(() => {
+    async function fetchUserProfile() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("grader_weight")
+          .eq("id", user.id)
+          .single();
+
+        if (profile?.grader_weight) {
+          setUserGraderWeight(profile.grader_weight);
+        }
+      }
+    }
+    fetchUserProfile();
+  }, []);
+
+  // Fetch a random photo entry from coin_photos
   async function fetchRandomPhoto() {
     setLoading(true);
+    setSubmitSuccess(null);
 
-    // 1. Get total row count
     const { count, error: countError } = await supabase
       .from("coin_photos")
       .select("*", { count: "exact", head: true });
@@ -83,19 +129,18 @@ export default function GradingPage() {
       return;
     }
 
-    // 2. Pick a random row offset
     const randomIndex = Math.floor(Math.random() * count);
 
     const { data, error } = await supabase
       .from("coin_photos")
-      .select("id, coin_id, obverse_url, reverse_url")
+      .select("*")
       .range(randomIndex, randomIndex)
       .single();
 
     if (error) {
       console.error("Error fetching random coin photo:", error);
     } else {
-      setCurrentPhoto(data);
+      setCurrentPhoto(data as CoinPhoto);
     }
 
     setLoading(false);
@@ -105,6 +150,133 @@ export default function GradingPage() {
     fetchRandomPhoto();
   }, []);
 
+  // Recalculate scores and submit
+  async function handleSubmitGrade() {
+    if (!currentPhoto) return;
+
+    setSubmitting(true);
+    setSubmitSuccess(null);
+
+    const oldTotalWeight = currentPhoto.total_grader_weight || 0;
+    const newTotalWeight = oldTotalWeight + userGraderWeight;
+
+    // 1. Calculate Score Given by User for Condition
+    let userConditionScore = 0;
+
+    if (isDetailsGrade) {
+      userConditionScore = DETAILS_GRADE_MAP[detailsGrade] || 20;
+    } else {
+      let effectiveGrade = numericGrade;
+      const hasPlus = designation === "+" || designation === "+*";
+
+      if (hasPlus && numericGrade < 70) {
+        const currentIndex = NUMERIC_GRADES.indexOf(numericGrade);
+        if (currentIndex !== -1 && currentIndex < NUMERIC_GRADES.length - 1) {
+          const nextGrade = NUMERIC_GRADES[currentIndex + 1];
+          effectiveGrade = numericGrade + (nextGrade - numericGrade) * 0.5;
+        }
+      }
+      userConditionScore = effectiveGrade;
+    }
+
+    // Weighted Recalculation for Condition Score
+    const newConditionScore =
+      (currentPhoto.condition_score * oldTotalWeight +
+        userConditionScore * userGraderWeight) /
+      newTotalWeight;
+
+    // Object to accumulate updates
+    const updates: Partial<CoinPhoto> = {
+      condition_score: newConditionScore,
+      total_grader_weight: newTotalWeight,
+    };
+
+    if (!isDetailsGrade) {
+      // 2. Strike / Proof Score
+      const userProofScore = STRIKE_MAP[strikeType] || 10;
+      updates.proof_score =
+        (currentPhoto.proof_score * oldTotalWeight +
+          userProofScore * userGraderWeight) /
+        newTotalWeight;
+
+      // 3. Beauty Score (* or +*)
+      const hasStar = designation === "*" || designation === "+*";
+      updates.beauty_score =
+        currentPhoto.beauty_score +
+        (hasStar ? userGraderWeight : -userGraderWeight);
+
+      // 4. Color Score
+      if (colorType === "RB") {
+        updates.color_score = currentPhoto.color_score + userGraderWeight;
+      } else if (colorType === "RD") {
+        updates.color_score = currentPhoto.color_score + 2 * userGraderWeight;
+      } else {
+        // Normal/BN
+        updates.color_score = currentPhoto.color_score - userGraderWeight;
+      }
+    } else {
+      // 5. Details Grade Damages
+      // Cleaning
+      if (cleaning === "None") {
+        updates.cleaning = currentPhoto.cleaning - userGraderWeight;
+      } else if (cleaning === "Cleaned") {
+        updates.cleaning = currentPhoto.cleaning + userGraderWeight;
+      } else if (cleaning === "Harshly Cleaned") {
+        updates.cleaning = currentPhoto.cleaning + 2 * userGraderWeight;
+      }
+
+      // Polishing
+      if (polishing === "None") {
+        updates.polishing = currentPhoto.polishing - userGraderWeight;
+      } else if (polishing === "Polished") {
+        updates.polishing = currentPhoto.polishing + userGraderWeight;
+      } else if (polishing === "Harshly Polished") {
+        updates.polishing = currentPhoto.polishing + 2 * userGraderWeight;
+      }
+
+      // Environmental Damage
+      if (environmental === "None") {
+        updates.environmental_damage =
+          currentPhoto.environmental_damage - userGraderWeight;
+      } else if (environmental === "Environmental Damage") {
+        updates.environmental_damage =
+          currentPhoto.environmental_damage + userGraderWeight;
+      } else if (environmental === "Heavy Environmental Damage") {
+        updates.environmental_damage =
+          currentPhoto.environmental_damage + 2 * userGraderWeight;
+      }
+
+      // Checkboxes (holed, bent, damaged, altered)
+      updates.holed =
+        currentPhoto.holed + (holed ? userGraderWeight : -userGraderWeight);
+      updates.bent =
+        currentPhoto.bent + (bent ? userGraderWeight : -userGraderWeight);
+      updates.damaged =
+        currentPhoto.damaged +
+        (damaged || exJewelry ? userGraderWeight : -userGraderWeight);
+      updates.altered =
+        currentPhoto.altered + (altered ? userGraderWeight : -userGraderWeight);
+    }
+
+    // Save to Supabase
+    const { error } = await supabase
+      .from("coin_photos")
+      .update(updates)
+      .eq("id", currentPhoto.id);
+
+    setSubmitting(false);
+
+    if (error) {
+      console.error("Error submitting grade:", error);
+      alert("Failed to submit grade. Please try again.");
+    } else {
+      setSubmitSuccess("Grade submitted and scores recalculated successfully!");
+      setTimeout(() => {
+        fetchRandomPhoto();
+      }, 1500);
+    }
+  }
+
   return (
     <main className="min-h-screen p-8 bg-blue-50 text-black">
       <div className="max-w-4xl mx-auto">
@@ -113,16 +285,20 @@ export default function GradingPage() {
           <div>
             <h1 className="text-4xl font-bold">Coin Grading Assistant</h1>
             <p className="text-gray-600 mt-1">
-              Evaluating coin photo entry #{currentPhoto ? currentPhoto.id : "..."}
+              Evaluating photo #{currentPhoto ? currentPhoto.id : "..."} | Your
+              Grader Weight:{" "}
+              <span className="font-semibold text-blue-700">
+                {userGraderWeight}
+              </span>
             </p>
           </div>
           <div className="flex gap-4 items-center">
             <button
               onClick={fetchRandomPhoto}
-              disabled={loading}
+              disabled={loading || submitting}
               className="bg-blue-600 text-white font-semibold px-4 py-2 rounded hover:bg-blue-700 transition disabled:opacity-50"
             >
-              {loading ? "Loading..." : "🔀 Random Coin"}
+              {loading ? "Loading..." : "🔀 Skip / Random"}
             </button>
             <Link
               href="/"
@@ -132,6 +308,12 @@ export default function GradingPage() {
             </Link>
           </div>
         </div>
+
+        {submitSuccess && (
+          <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-800 rounded-lg font-semibold text-center">
+            {submitSuccess}
+          </div>
+        )}
 
         <div className="bg-white p-6 rounded-lg shadow border space-y-8">
           {/* TWO BIG SQUARE IMAGE DISPLAY SLOTS */}
@@ -146,7 +328,7 @@ export default function GradingPage() {
               </div>
             ) : !currentPhoto ? (
               <div className="text-center py-12 text-gray-500 bg-gray-50 rounded border">
-                No coin photos found in the catalog. Run your SQL sync script to import images!
+                No coin photos found in the catalog.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -186,7 +368,9 @@ export default function GradingPage() {
                       />
                     ) : (
                       <div className="text-center p-4 text-gray-400">
-                        <p className="text-sm font-semibold">No Reverse Image</p>
+                        <p className="text-sm font-semibold">
+                          No Reverse Image
+                        </p>
                       </div>
                     )}
                   </div>
@@ -214,7 +398,7 @@ export default function GradingPage() {
             </label>
           </div>
 
-          {/* CONDITIONAL RENDERING BASED ON CHECKBOX */}
+          {/* CONDITIONAL FORM RENDERING */}
           {!isDetailsGrade ? (
             /* STANDARD NUMERIC GRADE OPTIONS */
             <div className="space-y-6">
@@ -223,7 +407,6 @@ export default function GradingPage() {
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Numeric Grade Selection */}
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">
                     Numeric Grade (1-70)
@@ -241,7 +424,6 @@ export default function GradingPage() {
                   </select>
                 </div>
 
-                {/* Strike Quality Dropdown */}
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">
                     Strike Quality
@@ -259,7 +441,6 @@ export default function GradingPage() {
                   </select>
                 </div>
 
-                {/* Color/Toning Dropdown */}
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">
                     Color / Toning
@@ -277,10 +458,9 @@ export default function GradingPage() {
                   </select>
                 </div>
 
-                {/* Designation Dropdown */}
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">
-                    Designation
+                    Designation (+ / *)
                   </label>
                   <select
                     value={designation}
@@ -303,7 +483,6 @@ export default function GradingPage() {
                 Details Grade Specifications
               </h3>
 
-              {/* Details Base Grade Dropdown */}
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">
                   Details Base Grade
@@ -321,7 +500,6 @@ export default function GradingPage() {
                 </select>
               </div>
 
-              {/* Surface Treatment & Environmental Dropdowns */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">
@@ -375,7 +553,6 @@ export default function GradingPage() {
                 </div>
               </div>
 
-              {/* Physical Damage Checkboxes */}
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-3">
                   Physical Damage & Defects
@@ -434,6 +611,17 @@ export default function GradingPage() {
               </div>
             </div>
           )}
+
+          {/* SUBMIT BUTTON SECTION */}
+          <div className="pt-4 border-t flex justify-end">
+            <button
+              onClick={handleSubmitGrade}
+              disabled={submitting || loading || !currentPhoto}
+              className="bg-green-600 hover:bg-green-700 text-white font-bold text-lg px-8 py-3 rounded-lg shadow transition disabled:opacity-50"
+            >
+              {submitting ? "Submitting & Recalculating..." : "Submit Grade"}
+            </button>
+          </div>
         </div>
       </div>
     </main>
