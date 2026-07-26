@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabase";
 
 const NUMERIC_GRADES = [
   1, 2, 3, 4, 6, 8, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 53, 55, 58, 60,
@@ -33,10 +34,16 @@ const ENVIRONMENTAL_OPTIONS = [
   "Heavy Environmental Damage",
 ];
 
+interface CoinPhoto {
+  id: number;
+  coin_id: number;
+  obverse_url: string;
+  reverse_url: string | null;
+}
+
 export default function GradingPage() {
-  // Image URL state
-  const [obverseUrl, setObverseUrl] = useState("");
-  const [reverseUrl, setReverseUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [currentPhoto, setCurrentPhoto] = useState<CoinPhoto | null>(null);
 
   // Grade mode state
   const [isDetailsGrade, setIsDetailsGrade] = useState(false);
@@ -53,12 +60,50 @@ export default function GradingPage() {
   const [polishing, setPolishing] = useState("None");
   const [environmental, setEnvironmental] = useState("None");
 
-  // Details Checkboxes
+  // Physical Damage Checkboxes
   const [holed, setHoled] = useState(false);
   const [bent, setBent] = useState(false);
   const [exJewelry, setExJewelry] = useState(false);
   const [damaged, setDamaged] = useState(false);
   const [altered, setAltered] = useState(false);
+
+  // Fetch a random photo entry from the coin_photos table
+  async function fetchRandomPhoto() {
+    setLoading(true);
+
+    // 1. Get total row count
+    const { count, error: countError } = await supabase
+      .from("coin_photos")
+      .select("*", { count: "exact", head: true });
+
+    if (countError || count === null || count === 0) {
+      console.error("No coin photos found or query failed:", countError);
+      setCurrentPhoto(null);
+      setLoading(false);
+      return;
+    }
+
+    // 2. Pick a random row offset
+    const randomIndex = Math.floor(Math.random() * count);
+
+    const { data, error } = await supabase
+      .from("coin_photos")
+      .select("id, coin_id, obverse_url, reverse_url")
+      .range(randomIndex, randomIndex)
+      .single();
+
+    if (error) {
+      console.error("Error fetching random coin photo:", error);
+    } else {
+      setCurrentPhoto(data);
+    }
+
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    fetchRandomPhoto();
+  }, []);
 
   return (
     <main className="min-h-screen p-8 bg-blue-50 text-black">
@@ -68,88 +113,86 @@ export default function GradingPage() {
           <div>
             <h1 className="text-4xl font-bold">Coin Grading Assistant</h1>
             <p className="text-gray-600 mt-1">
-              Specify visual references and condition attributes to grade your coin.
+              Evaluating coin photo entry #{currentPhoto ? currentPhoto.id : "..."}
             </p>
           </div>
-          <Link
-            href="/"
-            className="text-blue-600 font-semibold underline hover:text-blue-800"
-          >
-            ← Main Collection
-          </Link>
+          <div className="flex gap-4 items-center">
+            <button
+              onClick={fetchRandomPhoto}
+              disabled={loading}
+              className="bg-blue-600 text-white font-semibold px-4 py-2 rounded hover:bg-blue-700 transition disabled:opacity-50"
+            >
+              {loading ? "Loading..." : "🔀 Random Coin"}
+            </button>
+            <Link
+              href="/"
+              className="text-blue-600 font-semibold underline hover:text-blue-800"
+            >
+              ← Main Collection
+            </Link>
+          </div>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow border space-y-8">
-          {/* TWO BIG SQUARE IMAGE SLOTS */}
+          {/* TWO BIG SQUARE IMAGE DISPLAY SLOTS */}
           <div>
             <h2 className="text-xl font-bold mb-4 text-gray-800">
               Coin Image References
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Obverse Image Slot */}
-              <div className="flex flex-col items-center">
-                <span className="font-bold text-sm text-gray-700 mb-2">
-                  Obverse (Front)
-                </span>
-                <div className="w-full aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center overflow-hidden bg-gray-50 relative">
-                  {obverseUrl ? (
+
+            {loading ? (
+              <div className="text-center py-12 text-gray-500 font-semibold">
+                Fetching random coin photo...
+              </div>
+            ) : !currentPhoto ? (
+              <div className="text-center py-12 text-gray-500 bg-gray-50 rounded border">
+                No coin photos found in the catalog. Run your SQL sync script to import images!
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Obverse Image Slot */}
+                <div className="flex flex-col items-center">
+                  <span className="font-bold text-sm text-gray-700 mb-2">
+                    Obverse (Front)
+                  </span>
+                  <div className="w-full aspect-square border-2 border-gray-200 rounded-lg flex items-center justify-center overflow-hidden bg-gray-50 relative">
                     <img
-                      src={obverseUrl}
-                      alt="Obverse Preview"
+                      src={currentPhoto.obverse_url}
+                      alt="Obverse View"
                       className="w-full h-full object-contain"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src =
                           "https://placehold.co/400?text=Invalid+Obverse+URL";
                       }}
                     />
-                  ) : (
-                    <div className="text-center p-4 text-gray-400">
-                      <p className="text-sm font-semibold">Square Image Slot 1</p>
-                      <p className="text-xs">Paste URL below to preview</p>
-                    </div>
-                  )}
+                  </div>
                 </div>
-                <input
-                  type="text"
-                  placeholder="Paste Obverse Image URL..."
-                  value={obverseUrl}
-                  onChange={(e) => setObverseUrl(e.target.value)}
-                  className="mt-3 border p-2 w-full text-sm rounded bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
 
-              {/* Reverse Image Slot */}
-              <div className="flex flex-col items-center">
-                <span className="font-bold text-sm text-gray-700 mb-2">
-                  Reverse (Back)
-                </span>
-                <div className="w-full aspect-square border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center overflow-hidden bg-gray-50 relative">
-                  {reverseUrl ? (
-                    <img
-                      src={reverseUrl}
-                      alt="Reverse Preview"
-                      className="w-full h-full object-contain"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src =
-                          "https://placehold.co/400?text=Invalid+Reverse+URL";
-                      }}
-                    />
-                  ) : (
-                    <div className="text-center p-4 text-gray-400">
-                      <p className="text-sm font-semibold">Square Image Slot 2</p>
-                      <p className="text-xs">Paste URL below to preview</p>
-                    </div>
-                  )}
+                {/* Reverse Image Slot */}
+                <div className="flex flex-col items-center">
+                  <span className="font-bold text-sm text-gray-700 mb-2">
+                    Reverse (Back)
+                  </span>
+                  <div className="w-full aspect-square border-2 border-gray-200 rounded-lg flex items-center justify-center overflow-hidden bg-gray-50 relative">
+                    {currentPhoto.reverse_url ? (
+                      <img
+                        src={currentPhoto.reverse_url}
+                        alt="Reverse View"
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src =
+                            "https://placehold.co/400?text=Invalid+Reverse+URL";
+                        }}
+                      />
+                    ) : (
+                      <div className="text-center p-4 text-gray-400">
+                        <p className="text-sm font-semibold">No Reverse Image</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <input
-                  type="text"
-                  placeholder="Paste Reverse Image URL..."
-                  value={reverseUrl}
-                  onChange={(e) => setReverseUrl(e.target.value)}
-                  className="mt-3 border p-2 w-full text-sm rounded bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"
-                />
               </div>
-            </div>
+            )}
           </div>
 
           <hr className="border-gray-200" />
@@ -180,7 +223,7 @@ export default function GradingPage() {
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Numeric Grade Input Selection */}
+                {/* Numeric Grade Selection */}
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-1">
                     Numeric Grade (1-70)
