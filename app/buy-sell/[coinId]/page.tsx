@@ -56,7 +56,30 @@ export default function CoinTradePortal() {
     if (listingsError) {
       console.error("Error loading listings:", listingsError.message);
     } else {
-      setListings(listingsData || []);
+      // Helper to calculate score for sorting grades highest to lowest
+      const getGradeScore = (listing: any) => {
+        if (listing.numeric_grade !== null && listing.numeric_grade !== undefined && !isNaN(Number(listing.numeric_grade))) {
+          return Number(listing.numeric_grade);
+        }
+        const text = (listing.condition || listing.graded || "").toUpperCase();
+        if (text.includes("HU")) return 59.9;
+        if (text.includes("BU")) return 59.8;
+        if (text.includes("MU")) return 59.7;
+        if (text.includes("LU") || text.includes("UNC")) return 59.6;
+        if (text.includes("AU")) return 49.9;
+        if (text.includes("XF")) return 39.9;
+        if (text.includes("VF")) return 19.0;
+        if (text.includes("VG")) return 7.9;
+        if (text.includes("G")) return 3.9;
+        if (text.includes("AF")) return 2.9;
+        if (text.includes("FAIR") || text.includes("FR")) return 1.9;
+        if (text.includes("F")) return 11.9;
+        if (text.includes("P")) return 0.9;
+        return 0;
+      };
+
+      const sortedListings = (listingsData || []).sort((a, b) => getGradeScore(b) - getGradeScore(a));
+      setListings(sortedListings);
     }
 
     setLoading(false);
@@ -117,7 +140,7 @@ export default function CoinTradePortal() {
     const descriptiveString = parts.filter(Boolean).join(" ");
     const formattedPrice = `€${parseFloat(listing.price).toFixed(2)}`;
 
-    return `${descriptiveString} - ${formattedPrice}`;
+    return `${descriptiveString} ${formattedPrice}`;
   }
 
   if (loading) {
