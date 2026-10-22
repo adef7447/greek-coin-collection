@@ -31,22 +31,27 @@ export default function BuySellPage() {
       const countsMap: { [key: string]: { active: number; sold: number } } = {};
       if (listingsData) {
         listingsData.forEach((item) => {
-          if (!countsMap[item.coin_id]) {
-            countsMap[item.coin_id] = { active: 0, sold: 0 };
+          const key = String(item.coin_id);
+          if (!countsMap[key]) {
+            countsMap[key] = { active: 0, sold: 0 };
           }
-          if (item.status === "sold") {
-            countsMap[item.coin_id].sold += 1;
+          // Case-insensitive check for status to prevent mismatch issues
+          if (item.status && item.status.toLowerCase() === "sold") {
+            countsMap[key].sold += 1;
           } else {
-            countsMap[item.coin_id].active += 1;
+            countsMap[key].active += 1;
           }
         });
       }
 
-      const formattedCoins = (coinsData || []).map((coin) => ({
-        ...coin,
-        activeCount: countsMap[coin.id]?.active || 0,
-        soldCount: countsMap[coin.id]?.sold || 0,
-      }));
+      const formattedCoins = (coinsData || []).map((coin) => {
+        const coinKey = String(coin.id);
+        return {
+          ...coin,
+          activeCount: countsMap[coinKey]?.active || 0,
+          soldCount: countsMap[coinKey]?.sold || 0,
+        };
+      });
 
       setCoins(formattedCoins);
     }
