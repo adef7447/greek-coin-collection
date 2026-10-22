@@ -9,47 +9,17 @@ export default function BuySellPage() {
   const [loading, setLoading] = useState(true);
 
   async function fetchAllCoins() {
-    // Select all coins where name is not null, ordering by ID
-    const { data: coinsData, error: coinsError } = await supabase
+    // Select directly from the columns—zero computing on load
+    const { data, error } = await supabase
       .from("coins")
-      .select("id, name")
+      .select("id, name, active_count, sold_count")
       .not("name", "is", null)
       .order("id", { ascending: true });
 
-    if (coinsError) {
-      console.error("Error fetching coins for marketplace:", coinsError.message);
+    if (error) {
+      console.error("Error fetching marketplace catalog:", error.message);
     } else {
-      // Fetch all listings to count active and sold per coin (.range added to bypass the 1000-row limit)
-      const { data: listingsData, error: listingsError } = await supabase
-        .from("coin_listings")
-        .select("coin_id, status")
-        .range(0, 9999);
-
-      if (listingsError) {
-        console.error("Error fetching listings for counts:", listingsError.message);
-      }
-
-      const countsMap: { [key: string]: { active: number; sold: number } } = {};
-      if (listingsData) {
-        listingsData.forEach((item) => {
-          if (!countsMap[item.coin_id]) {
-            countsMap[item.coin_id] = { active: 0, sold: 0 };
-          }
-          if (item.status === "sold") {
-            countsMap[item.coin_id].sold += 1;
-          } else {
-            countsMap[item.coin_id].active += 1;
-          }
-        });
-      }
-
-      const formattedCoins = (coinsData || []).map((coin) => ({
-        ...coin,
-        activeCount: countsMap[coin.id]?.active || 0,
-        soldCount: countsMap[coin.id]?.sold || 0,
-      }));
-
-      setCoins(formattedCoins);
+      setCoins(data || []);
     }
     setLoading(false);
   }
@@ -104,8 +74,8 @@ export default function BuySellPage() {
                   <span className="group-hover:text-blue-700 transition flex items-center gap-2">
                     <span>{coin.name}</span>
                     <span className="text-xs flex items-center gap-1 font-normal">
-                      <span className="text-green-600 font-bold">({coin.activeCount})</span>
-                      <span className="text-red-600 font-bold">({coin.soldCount})</span>
+                      <span className="text-green-600 font-bold">({coin.active_count})</span>
+                      <span className="text-red-600 font-bold">({coin.sold_count})</span>
                     </span>
                   </span>
                   <span className="text-xs text-gray-400 group-hover:text-blue-400 transition">
