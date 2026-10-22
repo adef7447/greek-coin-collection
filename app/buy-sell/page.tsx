@@ -19,10 +19,11 @@ export default function BuySellPage() {
     if (coinsError) {
       console.error("Error fetching coins for marketplace:", coinsError.message);
     } else {
-      // Fetch all listings to count active and sold per coin
+      // Fetch all listings to count active and sold per coin (.range added to bypass the 1000-row limit)
       const { data: listingsData, error: listingsError } = await supabase
         .from("coin_listings")
-        .select("coin_id, status");
+        .select("coin_id, status")
+        .range(0, 9999);
 
       if (listingsError) {
         console.error("Error fetching listings for counts:", listingsError.message);
@@ -31,27 +32,22 @@ export default function BuySellPage() {
       const countsMap: { [key: string]: { active: number; sold: number } } = {};
       if (listingsData) {
         listingsData.forEach((item) => {
-          const key = String(item.coin_id);
-          if (!countsMap[key]) {
-            countsMap[key] = { active: 0, sold: 0 };
+          if (!countsMap[item.coin_id]) {
+            countsMap[item.coin_id] = { active: 0, sold: 0 };
           }
-          // Case-insensitive check for status to prevent mismatch issues
-          if (item.status && item.status.toLowerCase() === "sold") {
-            countsMap[key].sold += 1;
+          if (item.status === "sold") {
+            countsMap[item.coin_id].sold += 1;
           } else {
-            countsMap[key].active += 1;
+            countsMap[item.coin_id].active += 1;
           }
         });
       }
 
-      const formattedCoins = (coinsData || []).map((coin) => {
-        const coinKey = String(coin.id);
-        return {
-          ...coin,
-          activeCount: countsMap[coinKey]?.active || 0,
-          soldCount: countsMap[coinKey]?.sold || 0,
-        };
-      });
+      const formattedCoins = (coinsData || []).map((coin) => ({
+        ...coin,
+        activeCount: countsMap[coin.id]?.active || 0,
+        soldCount: countsMap[coin.id]?.sold || 0,
+      }));
 
       setCoins(formattedCoins);
     }
